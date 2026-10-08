@@ -37,3 +37,8 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
     })),
   };
 }
+
+export type Unit = "C" | "F";
+export const convertTemp = (c: number, unit: Unit): number => (unit === "F" ? (c * 9) / 5 + 32 : c);
+export const formatTemp = (c: number, unit: Unit, withUnit = true): string =>
+  `${Math.round(convertTemp(c, unit))}°${withUnit ? unit : ""}`;
