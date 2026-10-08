@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { describe, findPlace, getWeather, type Place, type Weather } from "./weather";
+import { loadLastCity, saveLastCity } from "./storage";
 
 export default function App() {
   const [query, setQuery] = useState("Kathmandu");
@@ -8,21 +9,34 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function search(e: React.FormEvent) {
-    e.preventDefault();
+  async function runSearch(city: string) {
     setLoading(true);
     setError(null);
     try {
-      const p = await findPlace(query);
-      if (!p) throw new Error(`No place found for "${query}"`);
+      const p = await findPlace(city);
+      if (!p) throw new Error(`No place found for "${city}"`);
       setPlace(p);
       setWeather(await getWeather(p));
+      saveLastCity(city);
     } catch (err) {
       setError((err as Error).message);
       setWeather(null);
     } finally {
       setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    const last = loadLastCity();
+    if (last) {
+      setQuery(last);
+      void runSearch(last);
+    }
+  }, []);
+
+  function search(e: React.FormEvent) {
+    e.preventDefault();
+    void runSearch(query);
   }
 
   return (
