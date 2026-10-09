@@ -77,6 +77,7 @@ export default function App() {
         <button type="button" disabled={loading} onClick={useMyLocation}>Use my location</button>
         <button type="button" onClick={() => setUnit(unit === "C" ? "F" : "C")}>Switch to °{unit === "C" ? "F" : "C"}</button>
       </form>
+      <p className="muted" role="status" aria-live="polite">{loading ? "Loading weather…" : ""}</p>
       {error && <p className="error" role="alert">{error}</p>}
       {place && weather && (
         <>
@@ -85,8 +86,9 @@ export default function App() {
             <p style={{ fontSize: 40, margin: 0 }}>{temp(weather.temperature)}°{unit}</p>
             <p className="muted">{describe(weather.code)} · wind {weather.wind} km/h</p>
           </section>
-          <table className="card" aria-label="Hourly forecast">
-            <thead><tr><th>Hour</th><th>Temp</th></tr></thead>
+          <table className="card">
+            <caption>Hourly forecast</caption>
+            <thead><tr><th scope="col">Hour</th><th scope="col">Temp</th></tr></thead>
             <tbody>
               {weather.hours.map((h) => (
                 <tr key={h.time}>
@@ -96,7 +98,8 @@ export default function App() {
             </tbody>
           </table>
           <table className="card">
-            <thead><tr><th>Day</th><th>Conditions</th><th>Min</th><th>Max</th></tr></thead>
+            <caption>Daily forecast</caption>
+            <thead><tr><th scope="col">Day</th><th scope="col">Conditions</th><th scope="col">Min</th><th scope="col">Max</th></tr></thead>
             <tbody>
               {weather.days.map((d) => (
                 <tr key={d.date}>
