@@ -75,3 +75,16 @@ test("my location shows a message when geolocation is unsupported", async () => 
   await userEvent.click(screen.getByRole("button", { name: "Use my location" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(/not supported/i);
 });
+
+test("unit toggle switches all temperatures between °C and °F", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Search" }));
+  expect(await screen.findByText("21°C")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Switch to °F" }));
+  expect(screen.getByText("70°F")).toBeInTheDocument();
+  expect(screen.getByText("77°")).toBeInTheDocument();
+  expect(screen.getByText("57°")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Switch to °C" }));
+  expect(screen.getByText("21°C")).toBeInTheDocument();
+});
