@@ -103,3 +103,36 @@ test("shows the next 12 hours in a table and respects the unit", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Switch to °F" }));
   expect(within(table).getByText("212°")).toBeInTheDocument();
 });
+
+test("forecast tables have captions and scope=col headers", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Search" }));
+  const tables = await screen.findAllByRole("table");
+  expect(tables).toHaveLength(2);
+  for (const t of tables) {
+    expect(t.querySelector("caption")).toBeInTheDocument();
+    const headers = within(t).getAllByRole("columnheader");
+    headers.forEach((h) => expect(h).toHaveAttribute("scope", "col"));
+  }
+  expect(screen.getByRole("table", { name: "Hourly forecast" })).toBeInTheDocument();
+  expect(screen.getByRole("table", { name: "Daily forecast" })).toBeInTheDocument();
+});
+
+test("loading state is announced via a polite live region", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  const status = screen.getByRole("status");
+  expect(status).toHaveAttribute("aria-live", "polite");
+  expect(status).toBeEmptyDOMElement();
+  await userEvent.click(screen.getByRole("button", { name: "Search" }));
+  await screen.findByText("Pokhara, Nepal");
+  expect(screen.getByRole("status")).toBeEmptyDOMElement();
+});
+
+test("live region says loading while a request is pending", async () => {
+  vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Search" }));
+  expect(screen.getByRole("status")).toHaveTextContent("Loading weather…");
+});
