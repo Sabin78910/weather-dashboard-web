@@ -1,4 +1,4 @@
-import { loadLastCity, saveLastCity, loadFavourites, saveFavourites } from "./storage";
+import { loadLastCity, saveLastCity, loadFavourites, saveFavourites, loadForecast, saveForecast } from "./storage";
 
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
 
@@ -28,4 +28,17 @@ test("favourites ignore corrupt data and storage errors", () => {
   expect(loadFavourites()).toEqual([]);
   vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("full"); });
   expect(() => saveFavourites(["X"])).not.toThrow();
+});
+
+test("round-trips the last forecast and ignores corrupt data", () => {
+  expect(loadForecast()).toBeNull();
+  const snap = { place: { name: "Oslo", country: "Norway", latitude: 1, longitude: 2 }, weather: { temperature: 3 }, savedAt: 1000 };
+  saveForecast(snap as never);
+  expect(loadForecast()).toEqual(snap);
+  localStorage.setItem("lastForecast", "{bad");
+  expect(loadForecast()).toBeNull();
+  localStorage.setItem("lastForecast", '{"foo":1}');
+  expect(loadForecast()).toBeNull();
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("full"); });
+  expect(() => saveForecast(snap as never)).not.toThrow();
 });

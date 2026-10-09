@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { loadLastCity, saveLastCity } from "./storage";
@@ -271,4 +271,29 @@ test("shows tip cards for today", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Search" }));
   const tips = await screen.findByRole("region", { name: "Tips for today" });
   expect(within(tips).getByText(/umbrella/i)).toBeInTheDocument();
+});
+
+test("shows the cached forecast with a last-updated note when offline", async () => {
+  const f = mockFetch();
+  vi.stubGlobal("fetch", f);
+  const { unmount } = render(<App />);
+  expect(await screen.findByText("Pokhara, Nepal")).toBeInTheDocument();
+  unmount();
+  vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))));
+  render(<App />);
+  expect(await screen.findByText("Pokhara, Nepal")).toBeInTheDocument();
+  expect(screen.getByText(/Offline · last updated/)).toBeInTheDocument();
+});
+
+test("install button appears on beforeinstallprompt and triggers the prompt", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  await screen.findByText("Pokhara, Nepal");
+  expect(screen.queryByRole("button", { name: "Install app" })).not.toBeInTheDocument();
+  const prompt = vi.fn(() => Promise.resolve());
+  const ev = Object.assign(new Event("beforeinstallprompt", { cancelable: true }), { prompt, userChoice: Promise.resolve({ outcome: "accepted" }) });
+  act(() => { window.dispatchEvent(ev); });
+  await userEvent.click(await screen.findByRole("button", { name: "Install app" }));
+  expect(prompt).toHaveBeenCalled();
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Install app" })).not.toBeInTheDocument());
 });
