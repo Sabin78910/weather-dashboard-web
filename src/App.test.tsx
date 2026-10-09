@@ -29,11 +29,21 @@ test("auto-searches the saved city on load", async () => {
   expect(String(f.mock.calls[0][0])).toContain("Pokhara");
 });
 
-test("does not search on load without a saved city", () => {
+test("fetches the default city (Kathmandu) on mount without a saved city", async () => {
   const f = mockFetch();
   vi.stubGlobal("fetch", f);
   render(<App />);
-  expect(f).not.toHaveBeenCalled();
+  expect(await screen.findByText("Pokhara, Nepal")).toBeInTheDocument();
+  expect(String(f.mock.calls[0][0])).toContain("Kathmandu");
+});
+
+test("hero shows temperature, condition, high and low", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  const hero = await screen.findByRole("region", { name: "Current weather" });
+  expect(within(hero).getByText("21°C")).toBeInTheDocument();
+  expect(within(hero).getByText(/H:25°/)).toBeInTheDocument();
+  expect(within(hero).getByText(/L:14°/)).toBeInTheDocument();
 });
 
 test("saves the city after a successful search", async () => {
@@ -61,21 +71,25 @@ test("my location button loads weather for current position", async () => {
   render(<App />);
   await userEvent.click(screen.getByRole("button", { name: "Use my location" }));
   expect(await screen.findByText("My location")).toBeInTheDocument();
-  expect(String(f.mock.calls[0][0])).toContain("latitude=1");
+  expect(f.mock.calls.some((c) => String(c[0]).includes("latitude=1"))).toBe(true);
 });
 
 test("my location shows a message when permission is denied", async () => {
   vi.stubGlobal("navigator", {
     geolocation: { getCurrentPosition: (_: PositionCallback, err: PositionErrorCallback) => err({ code: 1 } as GeolocationPositionError) },
   });
+  vi.stubGlobal("fetch", mockFetch());
   render(<App />);
+  await screen.findByText("Pokhara, Nepal");
   await userEvent.click(screen.getByRole("button", { name: "Use my location" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(/location/i);
 });
 
 test("my location shows a message when geolocation is unsupported", async () => {
   vi.stubGlobal("navigator", {});
+  vi.stubGlobal("fetch", mockFetch());
   render(<App />);
+  await screen.findByText("Pokhara, Nepal");
   await userEvent.click(screen.getByRole("button", { name: "Use my location" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(/not supported/i);
 });
@@ -136,8 +150,6 @@ test("loading state is announced via a polite live region", async () => {
   render(<App />);
   const status = screen.getByRole("status");
   expect(status).toHaveAttribute("aria-live", "polite");
-  expect(status).toBeEmptyDOMElement();
-  await userEvent.click(screen.getByRole("button", { name: "Search" }));
   await screen.findByText("Pokhara, Nepal");
   expect(screen.getByRole("status")).toBeEmptyDOMElement();
 });

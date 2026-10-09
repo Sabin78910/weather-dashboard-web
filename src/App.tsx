@@ -67,11 +67,9 @@ export default function App() {
   }
 
   useEffect(() => {
-    const last = loadLastCity();
-    if (last) {
-      setQuery(last);
-      void runSearch(last);
-    }
+    const city = loadLastCity() ?? "Kathmandu";
+    setQuery(city);
+    void runSearch(city);
   }, []);
 
   function search(e: React.FormEvent) {
@@ -82,12 +80,13 @@ export default function App() {
   return (
     <main>
       <div className={`sky ${weather ? sceneFor(weather.code, weather.isDay) : "none"}`} data-testid="sky" aria-hidden="true" />
-      <h1 className="card">Weather Dashboard</h1>
-      <form className="row card" onSubmit={search}>
-        <input aria-label="City" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <button type="submit" disabled={loading}>{loading ? "Loading…" : "Search"}</button>
-        <button type="button" disabled={loading} onClick={useMyLocation}>Use my location</button>
-        <button type="button" onClick={() => setUnit(unit === "C" ? "F" : "C")}>Switch to °{unit === "C" ? "F" : "C"}</button>
+      <h1 className="sr-only">Weather Dashboard</h1>
+      <form className="search" onSubmit={search} role="search">
+        <span className="search-icon" aria-hidden="true">🔍</span>
+        <input aria-label="City" placeholder="Search city" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <button type="submit" className="pill-btn" aria-label="Search" disabled={loading}>{loading ? "…" : "Go"}</button>
+        <button type="button" className="icon-btn" aria-label="Use my location" title="Use my location" disabled={loading} onClick={useMyLocation}>📍</button>
+        <button type="button" className="icon-btn" aria-label={`Switch to °${unit === "C" ? "F" : "C"}`} title={`Switch to °${unit === "C" ? "F" : "C"}`} onClick={() => setUnit(unit === "C" ? "F" : "C")}>°{unit === "C" ? "F" : "C"}</button>
       </form>
       {favourites.length > 0 && (
         <ul className="row" aria-label="Favourite cities" style={{ listStyle: "none", padding: 0 }}>
@@ -103,13 +102,14 @@ export default function App() {
       {error && <p className="error" role="alert">{error}</p>}
       {place && weather && (
         <>
-          <section className="card">
-            <h2 style={{ marginTop: 0 }}>{place.country ? `${place.name}, ${place.country}` : place.name}</h2>
+          <section className="hero" aria-label="Current weather">
+            <h2>{place.country ? `${place.name}, ${place.country}` : place.name}</h2>
+            <p className="hero-temp">{temp(weather.temperature)}°{unit}</p>
+            <p className="hero-cond">{describe(weather.code)} · wind {weather.wind} km/h</p>
+            {weather.days[0] && <p className="hero-range">H:{temp(weather.days[0].max)}° L:{temp(weather.days[0].min)}°</p>}
             {place.name !== "My location" && !favourites.includes(place.name) && (
               <button type="button" aria-label={`Save ${place.name} to favourites`} onClick={() => updateFavourites([...favourites, place.name])}>☆ Save</button>
             )}
-            <p style={{ fontSize: 40, margin: 0 }}>{temp(weather.temperature)}°{unit}</p>
-            <p className="muted">{describe(weather.code)} · wind {weather.wind} km/h</p>
           </section>
           <section className="card" aria-label="Air quality and UV">
             <h2 style={{ marginTop: 0 }}>Air quality &amp; UV</h2>
