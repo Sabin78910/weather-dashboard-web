@@ -1,3 +1,5 @@
+import { EN, num, t, type Key, type Lang } from "./i18n";
+
 export interface Place { name: string; country: string; latitude: number; longitude: number; }
 export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; }
 export interface HourForecast { time: string; temp: number; rain?: number; }
@@ -6,13 +8,7 @@ export interface AirQuality { aqi: number; pm25: number | null; }
 
 const HOURS_AHEAD = 12;
 
-const CODES: Record<number, string> = {
-  0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Rime fog",
-  51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain",
-  71: "Light snow", 73: "Snow", 75: "Heavy snow", 80: "Rain showers", 81: "Rain showers", 82: "Violent showers",
-  95: "Thunderstorm", 96: "Thunderstorm with hail", 99: "Thunderstorm with hail",
-};
-export const describe = (code: number): string => CODES[code] ?? "Unknown";
+export const describe = (code: number, lang: Lang = "en"): string => (`wx${code}` in EN ? t(lang, `wx${code}` as Key) : t(lang, "unknown"));
 
 export type IconKind = "sun" | "moon" | "partly-cloudy" | "cloud" | "rain" | "snow" | "storm" | "fog";
 
@@ -91,29 +87,30 @@ export type Unit = "C" | "F";
 export const convertTemp = (c: number, unit: Unit): number => (unit === "F" ? (c * 9) / 5 + 32 : c);
 
 export interface Level { label: string; color: string; }
+const lvl = (label: string, color: string, lang: Lang): Level => ({ label: t(lang, `lvl.${label}` as Key), color });
 const pick = (v: number, steps: [number, Level][], last: Level): Level => steps.find(([max]) => v < max)?.[1] ?? last;
 
 /** European AQI bands. */
-export const aqiLevel = (aqi: number): Level =>
+export const aqiLevel = (aqi: number, lang: Lang = "en"): Level =>
   pick(aqi, [
-    [20, { label: "Good", color: "#2e9e5b" }], [40, { label: "Fair", color: "#8ab82e" }], [60, { label: "Moderate", color: "#d4a017" }],
-    [80, { label: "Poor", color: "#e0742b" }], [100, { label: "Very poor", color: "#d23f3f" }],
-  ], { label: "Extremely poor", color: "#8e2a6b" });
+    [20, lvl("Good", "#2e9e5b", lang)], [40, lvl("Fair", "#8ab82e", lang)], [60, lvl("Moderate", "#d4a017", lang)],
+    [80, lvl("Poor", "#e0742b", lang)], [100, lvl("Very poor", "#d23f3f", lang)],
+  ], lvl("Extremely poor", "#8e2a6b", lang));
 
-export const uvLevel = (uv: number): Level =>
+export const uvLevel = (uv: number, lang: Lang = "en"): Level =>
   pick(uv, [
-    [3, { label: "Low", color: "#2e9e5b" }], [6, { label: "Moderate", color: "#d4a017" }], [8, { label: "High", color: "#e0742b" }],
-    [11, { label: "Very high", color: "#d23f3f" }],
-  ], { label: "Extreme", color: "#8e2a6b" });
+    [3, lvl("Low", "#2e9e5b", lang)], [6, lvl("Moderate", "#d4a017", lang)], [8, lvl("High", "#e0742b", lang)],
+    [11, lvl("Very high", "#d23f3f", lang)],
+  ], lvl("Extreme", "#8e2a6b", lang));
 
-export function healthAdvice(aqi: number | null, uv: number | null): string {
+export function healthAdvice(aqi: number | null, uv: number | null, lang: Lang = "en"): string {
   const tips: string[] = [];
-  if (aqi !== null && aqi >= 80) tips.push("Air quality is very poor: limit outdoor activity.");
-  else if (aqi !== null && aqi >= 60) tips.push("Air quality is poor: sensitive people should reduce outdoor exertion.");
-  if (uv !== null && uv >= 6) tips.push("Strong UV: wear sunscreen and a hat, and seek shade at midday.");
-  else if (uv !== null && uv >= 3) tips.push("Moderate UV: sunscreen is advisable.");
+  if (aqi !== null && aqi >= 80) tips.push(t(lang, "adviceAqiVery"));
+  else if (aqi !== null && aqi >= 60) tips.push(t(lang, "adviceAqiPoor"));
+  if (uv !== null && uv >= 6) tips.push(t(lang, "adviceUvStrong"));
+  else if (uv !== null && uv >= 3) tips.push(t(lang, "adviceUvModerate"));
   if (tips.length) return tips.join(" ");
-  return aqi === null && uv === null ? "" : "Conditions are great for being outdoors.";
+  return aqi === null && uv === null ? "" : t(lang, "adviceGreat");
 }
 
 /** Current air quality, or null when unavailable (never throws). */
@@ -132,14 +129,14 @@ export async function getAirQuality(p: Place, f: Fetch = fetch): Promise<AirQual
 const RAIN_THRESHOLD = 50;
 
 /** One-line "when does rain start" summary from hourly precipitation probability; "" when no data. */
-export function rainSummary(hours: HourForecast[]): string {
+export function rainSummary(hours: HourForecast[], lang: Lang = "en"): string {
   const known = hours.filter((h) => typeof h.rain === "number");
   if (!known.length) return "";
   const first = known.find((h) => (h.rain as number) >= RAIN_THRESHOLD);
-  if (!first) return `No rain expected in the next ${hours.length} hours`;
+  if (!first) return t(lang, "rainNone", { hours: num(lang, hours.length) });
   const hour = Number(first.time.slice(11, 13));
-  const label = `${hour % 12 || 12} ${hour < 12 ? "am" : "pm"}`;
-  return `Rain likely around ${label} (${first.rain}%)`;
+  const label = `${num(lang, hour % 12 || 12)} ${t(lang, hour < 12 ? "am" : "pm")}`;
+  return t(lang, "rainAt", { time: label, pct: num(lang, first.rain as number) });
 }
 
 /** Fraction (0–1) of the daylight span elapsed at `now`; clamped, so 0 before sunrise and 1 after sunset. */
@@ -165,7 +162,7 @@ export const UV_GAUGE_MAX = 11;
 
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 /** Compass point for a wind direction in degrees (direction the wind comes from). */
-export const compassPoint = (deg: number): string => COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+export const compassPoint = (deg: number, lang: Lang = "en"): string => t(lang, `dir.${COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8]}` as Key);
 
 export interface Tip { id: "umbrella" | "sunscreen" | "mask" | "jacket" | "great"; icon: string; text: string; }
 
@@ -174,22 +171,22 @@ const TIP_AQI = 60;
 const TIP_DROP = 8;
 
 /** Actionable tips for today from the forecast and (optional) air quality. */
-export function dailyTips(w: Pick<Weather, "temperature" | "code" | "days" | "hours" | "uv">, aqi: number | null): Tip[] {
+export function dailyTips(w: Pick<Weather, "temperature" | "code" | "days" | "hours" | "uv">, aqi: number | null, lang: Lang = "en"): Tip[] {
   const tips: Tip[] = [];
   const today = w.days[0];
-  if (today?.rain != null && today.rain >= RAIN_THRESHOLD) tips.push({ id: "umbrella", icon: "☂️", text: `Take an umbrella: ${today.rain}% chance of rain today.` });
-  if (w.uv !== null && w.uv >= TIP_UV) tips.push({ id: "sunscreen", icon: "🧴", text: `Wear sunscreen: UV index is ${w.uv}.` });
-  if (aqi !== null && aqi >= TIP_AQI) tips.push({ id: "mask", icon: "😷", text: "Consider a mask: air quality is poor." });
-  if (w.hours.length && w.temperature - Math.min(...w.hours.map((h) => h.temp)) >= TIP_DROP) tips.push({ id: "jacket", icon: "🧥", text: "Bring a jacket: temperatures will drop later." });
+  if (today?.rain != null && today.rain >= RAIN_THRESHOLD) tips.push({ id: "umbrella", icon: "☂️", text: t(lang, "tipUmbrella", { pct: num(lang, today.rain) }) });
+  if (w.uv !== null && w.uv >= TIP_UV) tips.push({ id: "sunscreen", icon: "🧴", text: t(lang, "tipSunscreen", { uv: num(lang, w.uv) }) });
+  if (aqi !== null && aqi >= TIP_AQI) tips.push({ id: "mask", icon: "😷", text: t(lang, "tipMask") });
+  if (w.hours.length && w.temperature - Math.min(...w.hours.map((h) => h.temp)) >= TIP_DROP) tips.push({ id: "jacket", icon: "🧥", text: t(lang, "tipJacket") });
   const pleasant = w.code <= 2 && !!today && today.max <= 30 && today.min >= 10;
-  if (!tips.length && pleasant) tips.push({ id: "great", icon: "🌤️", text: "Great day to be outside!" });
+  if (!tips.length && pleasant) tips.push({ id: "great", icon: "🌤️", text: t(lang, "tipGreat") });
   return tips;
 }
 
-export function shareSummary(place: Place, w: Pick<Weather, "temperature" | "code" | "days">, unit: Unit): string {
-  const t = (c: number) => Math.round(convertTemp(c, unit));
+export function shareSummary(place: Place, w: Pick<Weather, "temperature" | "code" | "days">, unit: Unit, lang: Lang = "en"): string {
+  const tmp = (c: number) => Math.round(convertTemp(c, unit));
   const where = place.country ? `${place.name}, ${place.country}` : place.name;
   const day = w.days[0];
-  const range = day ? ` H:${t(day.max)}° L:${t(day.min)}°` : "";
-  return `Today in ${where}: ${describe(w.code)}, ${t(w.temperature)}°${unit}.${range}`;
+  const range = day ? ` ${t(lang, "hl", { max: num(lang, tmp(day.max)), min: num(lang, tmp(day.min)) })}` : "";
+  return t(lang, "shareText", { where, cond: describe(w.code, lang), temp: num(lang, tmp(w.temperature)), unit, range });
 }

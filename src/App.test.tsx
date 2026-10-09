@@ -387,3 +387,28 @@ test("share button falls back to copying to the clipboard", async () => {
   expect(writeText).toHaveBeenCalledWith(expect.stringContaining(window.location.href));
   expect(await screen.findByText("Copied to clipboard")).toBeInTheDocument();
 });
+
+test("language switch translates the UI and persists across reloads", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  const { unmount } = render(<App />);
+  expect(await screen.findByText("Pokhara, Nepal")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "नेपाली" }));
+  expect(screen.getByRole("button", { name: "नेपाली" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("textbox", { name: "शहर" })).toBeInTheDocument();
+  expect(screen.getByText("दैनिक पूर्वानुमान")).toBeInTheDocument();
+  expect(screen.getByText("२१°C")).toBeInTheDocument();
+  expect(localStorage.getItem("lang")).toBe("ne");
+  unmount();
+  render(<App />);
+  expect(await screen.findByRole("textbox", { name: "शहर" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "EN" }));
+  expect(screen.getByRole("textbox", { name: "City" })).toBeInTheDocument();
+});
+
+test("defaults to Nepali when the browser language is Nepali", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  vi.spyOn(navigator, "language", "get").mockReturnValue("ne-NP");
+  render(<App />);
+  expect(await screen.findByRole("textbox", { name: "शहर" })).toBeInTheDocument();
+  vi.restoreAllMocks();
+});

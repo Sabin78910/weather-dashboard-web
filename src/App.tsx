@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { LANGS, detectLang, formatDateTime, formatWeekday, num, t, type Key, type Lang } from "./i18n";
 import WeatherIcon from "./WeatherIcon";
-import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, type ForecastSnapshot } from "./storage";
+import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, type ForecastSnapshot } from "./storage";
 
 function Gauge({ label, value, max, color, text }: { label: string; value: number; max: number; color: string; text: string }) {
   const f = gaugeFraction(value, max);
@@ -21,12 +22,13 @@ type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Pro
 const isOffline = (err: unknown) => !navigator.onLine || err instanceof TypeError;
 
 export const RETRY_DELAYS_MS = [2000, 5000, 15000];
-const FRIENDLY_ERROR = "Can't reach the weather service right now";
+const MY_LOCATION = "My location";
 class NotFoundError extends Error {}
+type ErrorMsg = { key: Key; params?: Record<string, string> };
 
-function ErrorIllustration() {
+function ErrorIllustration({ label }: { label: string }) {
   return (
-    <svg className="error-art" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Cloud with a lightning bolt">
+    <svg className="error-art" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label={label}>
       <path d="M18 46a12 12 0 0 1 1-24 16 16 0 0 1 30 4 10 10 0 0 1-2 20z" fill="#9aa5b8" />
       <path d="M34 28l-8 12h6l-3 10 11-14h-6z" fill="#ffd54a" />
     </svg>
@@ -38,9 +40,10 @@ export default function App() {
   const [place, setPlace] = useState<Place | null>(null);
   const [weather, setWeather] = useState<Weather | null>(null);
   const [air, setAir] = useState<AirQuality | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorMsg | null>(null);
   const [loading, setLoading] = useState(false);
   const [favourites, setFavourites] = useState<string[]>(loadFavourites);
+  const [lang, setLang] = useState<Lang>(() => loadLang() ?? detectLang());
   const [unit, setUnit] = useState<Unit>("C");
   const [cachedAt, setCachedAt] = useState<number | null>(null);
   const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(null);
@@ -48,11 +51,15 @@ export default function App() {
   const [retrying, setRetrying] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const runId = useRef(0);
-  const temp = (c: number) => Math.round(convertTemp(c, unit));
+  const L = (key: Key, params?: Record<string, string | number>) => t(lang, key, params);
+  const n = (v: number | string) => num(lang, v);
+  const temp = (c: number) => n(Math.round(convertTemp(c, unit)));
+  const rawTemp = (c: number) => Math.round(convertTemp(c, unit));
+  const changeLang = (next: Lang) => { setLang(next); saveLang(next); };
 
   async function fetchForecast(city: string) {
     const p = await findPlace(city);
-    if (!p) throw new NotFoundError(`No place found for "${city}"`);
+    if (!p) throw new NotFoundError(city);
     return { p, w: await getWeather(p) };
   }
 
@@ -95,7 +102,7 @@ export default function App() {
         setCachedAt(cached.savedAt);
         setError(null);
       } else {
-        setError(err instanceof NotFoundError ? err.message : FRIENDLY_ERROR);
+        setError(err instanceof NotFoundError ? { key: "notFound", params: { city: err.message } } : { key: "friendlyError" });
         setWeather(null);
       }
     } finally {
@@ -108,7 +115,7 @@ export default function App() {
 
   function useMyLocation() {
     if (!navigator.geolocation) {
-      setError("Geolocation is not supported by this browser");
+      setError({ key: "geoUnsupported" });
       return;
     }
     setLoading(true);
@@ -116,20 +123,20 @@ export default function App() {
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
         try {
-          const p: Place = { name: "My location", country: "", latitude: coords.latitude, longitude: coords.longitude };
+          const p: Place = { name: MY_LOCATION, country: "", latitude: coords.latitude, longitude: coords.longitude };
           setPlace(p);
           setAir(null);
           void getAirQuality(p).then(setAir);
           setWeather(await getWeather(p));
         } catch {
-          setError(FRIENDLY_ERROR);
+          setError({ key: "friendlyError" });
           setWeather(null);
         } finally {
           setLoading(false);
         }
       },
       (err) => {
-        setError(err.code === 1 ? "Location permission denied. Search for a city instead." : "Could not determine your location");
+        setError({ key: err.code === 1 ? "geoDenied" : "geoFailed" });
         setLoading(false);
       },
     );
@@ -142,17 +149,17 @@ export default function App() {
 
   async function share() {
     if (!place || !weather) return;
-    const text = shareSummary(place, weather, unit);
+    const text = shareSummary(place, weather, unit, lang);
     const url = window.location.href;
     try {
       if (navigator.share) {
-        await navigator.share({ title: "Weather Dashboard", text, url });
+        await navigator.share({ title: L("title"), text, url });
       } else {
         await navigator.clipboard.writeText(`${text} ${url}`);
-        setShareNote("Copied to clipboard");
+        setShareNote(L("copied"));
       }
     } catch (err) {
-      if ((err as Error).name !== "AbortError") setShareNote("Could not share");
+      if ((err as Error).name !== "AbortError") setShareNote(L("shareFail"));
     }
   }
 
@@ -188,31 +195,36 @@ export default function App() {
   return (
     <main>
       <div className={`sky ${weather ? sceneFor(weather.code, weather.isDay) : "none"}`} data-testid="sky" aria-hidden="true" />
-      <h1 className="sr-only">Weather Dashboard</h1>
+      <h1 className="sr-only">{L("title")}</h1>
+      <div className="lang-switch" role="group" aria-label={L("language")}>
+        {LANGS.map((l) => (
+          <button key={l} type="button" lang={l} aria-pressed={lang === l} onClick={() => changeLang(l)}>{l === "en" ? "EN" : "नेपाली"}</button>
+        ))}
+      </div>
       <form className="search" onSubmit={search} role="search">
         <span className="search-icon" aria-hidden="true">🔍</span>
-        <input aria-label="City" placeholder="Search city" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <button type="submit" className="pill-btn" aria-label="Search" disabled={loading}>{loading ? "…" : "Go"}</button>
-        <button type="button" className="icon-btn" aria-label="Use my location" title="Use my location" disabled={loading} onClick={useMyLocation}>📍</button>
-        <button type="button" className="icon-btn" aria-label={`Switch to °${unit === "C" ? "F" : "C"}`} title={`Switch to °${unit === "C" ? "F" : "C"}`} onClick={() => setUnit(unit === "C" ? "F" : "C")}>°{unit === "C" ? "F" : "C"}</button>
-        {installEvent && <button type="button" className="pill-btn" onClick={() => void install()}>Install app</button>}
+        <input aria-label={L("city")} placeholder={L("searchPlaceholder")} value={query} onChange={(e) => setQuery(e.target.value)} />
+        <button type="submit" className="pill-btn" aria-label={L("search")} disabled={loading}>{loading ? "…" : L("go")}</button>
+        <button type="button" className="icon-btn" aria-label={L("useLocation")} title={L("useLocation")} disabled={loading} onClick={useMyLocation}>📍</button>
+        <button type="button" className="icon-btn" aria-label={L("switchUnit", { unit: unit === "C" ? "F" : "C" })} title={L("switchUnit", { unit: unit === "C" ? "F" : "C" })} onClick={() => setUnit(unit === "C" ? "F" : "C")}>°{unit === "C" ? "F" : "C"}</button>
+        {installEvent && <button type="button" className="pill-btn" onClick={() => void install()}>{L("install")}</button>}
       </form>
       {favourites.length > 0 && (
-        <ul className="row" aria-label="Favourite cities" style={{ listStyle: "none", padding: 0 }}>
+        <ul className="row" aria-label={L("favourites")} style={{ listStyle: "none", padding: 0 }}>
           {favourites.map((c) => (
             <li key={c}>
               <button type="button" disabled={loading} onClick={() => { setQuery(c); void runSearch(c); }}>{c}</button>
-              <button type="button" aria-label={`Remove ${c} from favourites`} onClick={() => updateFavourites(favourites.filter((f) => f !== c))}>✕</button>
+              <button type="button" aria-label={L("removeFav", { city: c })} onClick={() => updateFavourites(favourites.filter((f) => f !== c))}>✕</button>
             </li>
           ))}
         </ul>
       )}
-      <p className="muted" role="status" aria-live="polite">{loading ? "Loading weather…" : ""}</p>
+      <p className="muted" role="status" aria-live="polite">{loading ? L("loading") : ""}</p>
       {error && (
         <div className="error-card" role="alert">
-          {error === FRIENDLY_ERROR && <ErrorIllustration />}
-          <p>{error}</p>
-          <button type="button" disabled={loading} onClick={() => void runSearch(query)}>Retry</button>
+          {error.key === "friendlyError" && <ErrorIllustration label={L("errorArt")} />}
+          <p>{L(error.key, error.params)}</p>
+          <button type="button" disabled={loading} onClick={() => void runSearch(query)}>{L("retry")}</button>
         </div>
       )}
       {loading && !weather && (
@@ -223,54 +235,54 @@ export default function App() {
           <div className="card skeleton" />
         </div>
       )}
-      {retrying && <p className="muted" role="status">Having trouble connecting, retrying…{updatedAt !== null && ` Last updated ${new Date(updatedAt).toLocaleString()}`}</p>}
-      {cachedAt !== null && <p className="muted" role="status">Offline · last updated {new Date(cachedAt).toLocaleString()}</p>}
+      {retrying && <p className="muted" role="status">{L("retrying")}{updatedAt !== null && L("lastUpdated", { when: formatDateTime(lang, updatedAt) })}</p>}
+      {cachedAt !== null && <p className="muted" role="status">{L("offline", { when: formatDateTime(lang, cachedAt) })}</p>}
       {place && weather && (
         <>
-          <section className="hero" aria-label="Current weather">
-            <h2>{place.country ? `${place.name}, ${place.country}` : place.name}</h2>
+          <section className="hero" aria-label={L("currentWeather")}>
+            <h2>{place.name === MY_LOCATION ? L("myLocation") : place.country ? `${place.name}, ${place.country}` : place.name}</h2>
             <WeatherIcon code={weather.code} isDay={weather.isDay} size={72} />
             <p className="hero-temp">{temp(weather.temperature)}°{unit}</p>
-            <p className="hero-cond">{describe(weather.code)} · wind {weather.wind} km/h</p>
-            {weather.days[0] && <p className="hero-range">H:{temp(weather.days[0].max)}° L:{temp(weather.days[0].min)}°</p>}
-            <button type="button" aria-label="Share forecast" onClick={() => { setShareNote(null); void share(); }}>Share</button>
+            <p className="hero-cond">{L("heroCond", { cond: describe(weather.code, lang), wind: n(weather.wind) })}</p>
+            {weather.days[0] && <p className="hero-range">{L("hl", { max: temp(weather.days[0].max), min: temp(weather.days[0].min) })}</p>}
+            <button type="button" aria-label={L("shareAria")} onClick={() => { setShareNote(null); void share(); }}>{L("share")}</button>
             {shareNote && <p className="muted" role="status">{shareNote}</p>}
-            {place.name !== "My location" && !favourites.includes(place.name) && (
-              <button type="button" aria-label={`Save ${place.name} to favourites`} onClick={() => updateFavourites([...favourites, place.name])}>☆ Save</button>
+            {place.name !== MY_LOCATION && !favourites.includes(place.name) && (
+              <button type="button" aria-label={L("saveFav", { city: place.name })} onClick={() => updateFavourites([...favourites, place.name])}>{L("save")}</button>
             )}
           </section>
           <div className="bento">
-            {dailyTips(weather, air?.aqi ?? null).length > 0 && (
-              <section className="card wide" aria-label="Tips for today">
-                <h2>Tips for today</h2>
+            {dailyTips(weather, air?.aqi ?? null, lang).length > 0 && (
+              <section className="card wide" aria-label={L("tips")}>
+                <h2>{L("tips")}</h2>
                 <ul style={{ listStyle: "none", padding: 0 }}>
-                  {dailyTips(weather, air?.aqi ?? null).map((t) => <li key={t.id}><span aria-hidden="true">{t.icon}</span> {t.text}</li>)}
+                  {dailyTips(weather, air?.aqi ?? null, lang).map((t) => <li key={t.id}><span aria-hidden="true">{t.icon}</span> {t.text}</li>)}
                 </ul>
               </section>
             )}
-            <section className="card" aria-label="Air quality">
-              <h2>Air quality</h2>
+            <section className="card" aria-label={L("air")}>
+              <h2>{L("air")}</h2>
               {air ? (
                 <>
-                  <Gauge label="Air quality index" value={air.aqi} max={AQI_GAUGE_MAX} color={aqiLevel(air.aqi).color} text={String(air.aqi)} />
+                  <Gauge label={L("airIndex")} value={air.aqi} max={AQI_GAUGE_MAX} color={aqiLevel(air.aqi).color} text={n(air.aqi)} />
                   <p style={{ color: aqiLevel(air.aqi).color, fontWeight: 600 }}>
-                    AQI {air.aqi} · {aqiLevel(air.aqi).label}{air.pm25 !== null && ` · PM2.5 ${air.pm25} µg/m³`}
+                    {L("aqi")} {n(air.aqi)} · {aqiLevel(air.aqi, lang).label}{air.pm25 !== null && ` · ${L("pm25")} ${n(air.pm25)} µg/m³`}
                   </p>
                 </>
-              ) : <p className="muted">Air quality unavailable</p>}
+              ) : <p className="muted">{L("airUnavailable")}</p>}
             </section>
-            <section className="card" aria-label="UV index">
-              <h2>UV index</h2>
+            <section className="card" aria-label={L("uvIndex")}>
+              <h2>{L("uvIndex")}</h2>
               {weather.uv !== null && (
                 <>
-                  <Gauge label="UV level" value={weather.uv} max={UV_GAUGE_MAX} color={uvLevel(weather.uv).color} text={String(weather.uv)} />
-                  <p style={{ color: uvLevel(weather.uv).color, fontWeight: 600 }}>UV {weather.uv} · {uvLevel(weather.uv).label}</p>
+                  <Gauge label={L("uvLevel")} value={weather.uv} max={UV_GAUGE_MAX} color={uvLevel(weather.uv).color} text={n(weather.uv)} />
+                  <p style={{ color: uvLevel(weather.uv).color, fontWeight: 600 }}>{L("uv")} {n(weather.uv)} · {uvLevel(weather.uv, lang).label}</p>
                 </>
               )}
-              <p className="muted">{healthAdvice(air?.aqi ?? null, weather.uv)}</p>
+              <p className="muted">{healthAdvice(air?.aqi ?? null, weather.uv, lang)}</p>
             </section>
-            <section className="card" aria-label="Wind">
-              <h2>Wind</h2>
+            <section className="card" aria-label={L("wind")}>
+              <h2>{L("wind")}</h2>
               {weather.windDir !== null && (
                 <svg className="compass" viewBox="0 0 100 100" aria-hidden="true">
                   <circle cx="50" cy="50" r="44" fill="none" stroke="#ffffff55" strokeWidth="2" />
@@ -278,44 +290,44 @@ export default function App() {
                   <polygon points="50,24 58,56 50,50 42,56" fill="currentColor" transform={`rotate(${(weather.windDir + 180) % 360} 50 50)`} />
                 </svg>
               )}
-              <p>{weather.wind} km/h{weather.windDir !== null && ` · ${compassPoint(weather.windDir)}`}</p>
+              <p>{n(weather.wind)} {L("kmh")}{weather.windDir !== null && ` · ${compassPoint(weather.windDir, lang)}`}</p>
             </section>
             {weather.sunrise && weather.sunset && weather.now && (() => {
               const pt = arcPoint(sunProgress(weather.now, weather.sunrise, weather.sunset), 50, 50, 40);
               return (
-                <section className="card" aria-label="Sunrise and sunset">
-                  <h2>Sun</h2>
+                <section className="card" aria-label={L("sunAria")}>
+                  <h2>{L("sun")}</h2>
                   <svg className="gauge" viewBox="0 0 100 60" aria-hidden="true">
                     <path d="M10 50 A40 40 0 0 1 90 50" fill="none" stroke="#ffffff55" strokeWidth="2" strokeDasharray="3 3" />
                     <line x1="5" y1="50" x2="95" y2="50" stroke="#ffffff55" />
                     <circle cx={pt.x} cy={pt.y} r="5" fill="#ffe27a" />
                   </svg>
-                  <p>↑ {weather.sunrise.slice(11, 16)} · ↓ {weather.sunset.slice(11, 16)}</p>
+                  <p>↑ {n(weather.sunrise.slice(11, 16))} · ↓ {n(weather.sunset.slice(11, 16))}</p>
                 </section>
               );
             })()}
-            {rainSummary(weather.hours) && <p className="card">{rainSummary(weather.hours)}</p>}
-            <section className="card wide" aria-label="Hourly forecast">
-              <h2>Hourly forecast</h2>
-              <ul className="hourly" aria-label="Hourly forecast">
+            {rainSummary(weather.hours, lang) && <p className="card">{rainSummary(weather.hours, lang)}</p>}
+            <section className="card wide" aria-label={L("hourly")}>
+              <h2>{L("hourly")}</h2>
+              <ul className="hourly" aria-label={L("hourly")}>
                 {weather.hours.map((h) => (
-                  <li key={h.time}><span>{h.time.slice(11, 16)}</span><strong>{temp(h.temp)}°</strong></li>
+                  <li key={h.time}><span>{n(h.time.slice(11, 16))}</span><strong>{temp(h.temp)}°</strong></li>
                 ))}
               </ul>
             </section>
           <table className="card wide">
-            <caption>Daily forecast</caption>
-            <thead><tr><th scope="col">Day</th><th scope="col">Conditions</th><th scope="col">Rain</th><th scope="col">Min</th><th scope="col">Range</th><th scope="col">Max</th></tr></thead>
+            <caption>{L("daily")}</caption>
+            <thead><tr><th scope="col">{L("day")}</th><th scope="col">{L("conditions")}</th><th scope="col">{L("rain")}</th><th scope="col">{L("min")}</th><th scope="col">{L("range")}</th><th scope="col">{L("max")}</th></tr></thead>
             <tbody>
               {weather.days.map((d) => (
                 <tr key={d.date}>
-                  <td>{new Date(d.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</td>
-                  <td><WeatherIcon code={d.code} /> {describe(d.code)}</td>
-                  <td>{d.rain === null ? "–" : `${d.rain}%`}</td>
+                  <td>{formatWeekday(lang, d.date)}</td>
+                  <td><WeatherIcon code={d.code} /> {describe(d.code, lang)}</td>
+                  <td>{d.rain === null ? "–" : `${n(d.rain)}%`}</td>
                   <td>{temp(d.min)}°</td>
                   <td>
-                    <div className="range" role="meter" aria-label={`${temp(d.min)}° to ${temp(d.max)}°${unit}`}
-                      aria-valuemin={temp(d.min)} aria-valuemax={temp(d.max)} aria-valuenow={temp(d.max)}>
+                    <div className="range" role="meter" aria-label={L("rangeAria", { min: temp(d.min), max: temp(d.max), unit })}
+                      aria-valuemin={rawTemp(d.min)} aria-valuemax={rawTemp(d.max)} aria-valuenow={rawTemp(d.max)}>
                       <span style={{ left: `${rangeBar(d, weather.days).left}%`, width: `${rangeBar(d, weather.days).width}%` }} />
                     </div>
                   </td>
@@ -327,7 +339,7 @@ export default function App() {
           </div>
         </>
       )}
-      <p className="muted card">Data: <a href="https://open-meteo.com/">Open-Meteo</a></p>
+      <p className="muted card">{L("data")} <a href="https://open-meteo.com/">Open-Meteo</a></p>
     </main>
   );
 }
