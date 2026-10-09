@@ -1,4 +1,4 @@
-import { describe as describeCode, findPlace, getWeather, convertTemp, iconFor, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice } from "./weather";
+import { describe as describeCode, findPlace, getWeather, convertTemp, iconFor, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -122,4 +122,28 @@ test("getWeather reads today's UV index", async () => {
   const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
   expect(w.uv).toBe(7.4);
   expect(String((f.mock.calls[0] as unknown[])[0])).toContain("uv_index_max");
+});
+
+const hr = (h: number, rain?: number) => ({ time: `2026-10-08T${String(h).padStart(2, "0")}:00`, temp: 10, rain });
+
+test("rainSummary reports the first likely rain hour", () => {
+  expect(rainSummary([hr(13, 10), hr(14, 20), hr(15, 70), hr(16, 90)])).toBe("Rain likely around 3 pm (70%)");
+  expect(rainSummary([hr(0, 50)])).toBe("Rain likely around 12 am (50%)");
+});
+
+test("rainSummary handles dry and missing data", () => {
+  expect(rainSummary(Array.from({ length: 12 }, (_, i) => hr(i, 10)))).toBe("No rain expected in the next 12 hours");
+  expect(rainSummary([hr(1), hr(2)])).toBe("");
+  expect(rainSummary([])).toBe("");
+});
+
+test("getWeather includes hourly rain probability", async () => {
+  const time = ["2026-10-08T10:00", "2026-10-08T11:00"];
+  const f = () => ok({
+    current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 },
+    daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61] },
+    hourly: { time, temperature_2m: [1, 2], precipitation_probability: [5, 60] },
+  });
+  const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
+  expect(w.hours.map((h) => h.rain)).toEqual([5, 60]);
 });

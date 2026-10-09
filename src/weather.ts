@@ -1,6 +1,6 @@
 export interface Place { name: string; country: string; latitude: number; longitude: number; }
 export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; }
-export interface HourForecast { time: string; temp: number; }
+export interface HourForecast { time: string; temp: number; rain?: number; }
 export interface Weather { temperature: number; wind: number; code: number; days: DayForecast[]; hours: HourForecast[]; uv: number | null; }
 export interface AirQuality { aqi: number; pm25: number | null; }
 
@@ -48,7 +48,7 @@ export async function findPlace(query: string, f: Fetch = fetch): Promise<Place 
 export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
-    `&current=temperature_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,uv_index_max&hourly=temperature_2m&timezone=auto&forecast_days=7`;
+    `&current=temperature_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,uv_index_max&hourly=temperature_2m,precipitation_probability&timezone=auto&forecast_days=7`;
   const res = await f(url);
   if (!res.ok) throw new Error(`Forecast failed (${res.status})`);
   const d = await res.json();
@@ -56,7 +56,10 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const nowHour: string = (d.current.time ?? times[0] ?? "").slice(0, 13);
   const start = Math.max(0, times.findIndex((t) => t.slice(0, 13) >= nowHour));
   const hours: HourForecast[] = times
-    .map((time, i) => ({ time, temp: d.hourly.temperature_2m[i] as number }))
+    .map((time, i) => ({
+      time, temp: d.hourly.temperature_2m[i] as number,
+      ...(typeof d.hourly.precipitation_probability?.[i] === "number" && { rain: d.hourly.precipitation_probability[i] as number }),
+    }))
     .slice(start, start + HOURS_AHEAD);
   return {
     temperature: d.current.temperature_2m,
@@ -111,4 +114,17 @@ export async function getAirQuality(p: Place, f: Fetch = fetch): Promise<AirQual
   } catch {
     return null;
   }
+}
+
+const RAIN_THRESHOLD = 50;
+
+/** One-line "when does rain start" summary from hourly precipitation probability; "" when no data. */
+export function rainSummary(hours: HourForecast[]): string {
+  const known = hours.filter((h) => typeof h.rain === "number");
+  if (!known.length) return "";
+  const first = known.find((h) => (h.rain as number) >= RAIN_THRESHOLD);
+  if (!first) return `No rain expected in the next ${hours.length} hours`;
+  const hour = Number(first.time.slice(11, 13));
+  const label = `${hour % 12 || 12} ${hour < 12 ? "am" : "pm"}`;
+  return `Rain likely around ${label} (${first.rain}%)`;
 }

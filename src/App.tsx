@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, iconFor, rangeBar, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, rainSummary, iconFor, rangeBar, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { loadLastCity, saveLastCity } from "./storage";
 
 export default function App() {
@@ -105,6 +105,7 @@ export default function App() {
             )}
             <p className="muted">{healthAdvice(air?.aqi ?? null, weather.uv)}</p>
           </section>
+          {rainSummary(weather.hours) && <p className="card">{rainSummary(weather.hours)}</p>}
           <table className="card">
             <caption>Hourly forecast</caption>
             <thead><tr><th scope="col">Hour</th><th scope="col">Temp</th></tr></thead>
