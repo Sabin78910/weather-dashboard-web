@@ -14,17 +14,17 @@ const CODES: Record<number, string> = {
 };
 export const describe = (code: number): string => CODES[code] ?? "Unknown";
 
-export const iconFor = (code: number): string => {
-  if (code === 0 || code === 1) return "☀️";
-  if (code === 2) return "⛅";
-  if (code === 3) return "☁️";
-  if (code === 45 || code === 48) return "🌫️";
-  if (code >= 51 && code <= 65) return "🌧️";
-  if (code >= 71 && code <= 77) return "❄️";
-  if (code >= 80 && code <= 82) return "🌦️";
-  if (code >= 95 && code <= 99) return "⛈️";
-  return "❓";
-};
+export type IconKind = "sun" | "moon" | "partly-cloudy" | "cloud" | "rain" | "snow" | "storm" | "fog";
+
+export function iconKind(code: number, isDay = true): IconKind {
+  if (code === 0 || code === 1) return isDay ? "sun" : "moon";
+  if (code === 2) return "partly-cloudy";
+  if (code === 45 || code === 48) return "fog";
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return "rain";
+  if (code >= 71 && code <= 77) return "snow";
+  if (code >= 95 && code <= 99) return "storm";
+  return "cloud";
+}
 
 export type Scene = `${"clear" | "cloudy" | "rain" | "snow" | "storm"}-${"day" | "night"}`;
 

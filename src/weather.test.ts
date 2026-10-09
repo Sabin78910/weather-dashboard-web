@@ -1,4 +1,4 @@
-import { describe as describeCode, findPlace, getWeather, convertTemp, iconFor, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor } from "./weather";
+import { describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -65,12 +65,17 @@ test("getWeather requests 7 days with rain chance and tolerates missing rain dat
   expect(w.days[0].rain).toBeNull();
 });
 
-test("iconFor maps codes to icons", () => {
-  expect(iconFor(0)).toBe("☀️");
-  expect(iconFor(63)).toBe("🌧️");
-  expect(iconFor(73)).toBe("❄️");
-  expect(iconFor(95)).toBe("⛈️");
-  expect(iconFor(1234)).toBe("❓");
+test("iconKind maps codes and day/night to icon kinds", () => {
+  expect(iconKind(0, true)).toBe("sun");
+  expect(iconKind(1, false)).toBe("moon");
+  expect(iconKind(2, true)).toBe("partly-cloudy");
+  expect(iconKind(3, true)).toBe("cloud");
+  expect(iconKind(45, true)).toBe("fog");
+  expect(iconKind(63, true)).toBe("rain");
+  expect(iconKind(81, true)).toBe("rain");
+  expect(iconKind(73, true)).toBe("snow");
+  expect(iconKind(95, true)).toBe("storm");
+  expect(iconKind(1234, true)).toBe("cloud");
 });
 
 test("rangeBar positions a day within the week's range", () => {
