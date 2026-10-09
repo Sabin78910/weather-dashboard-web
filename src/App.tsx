@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, rainSummary, iconFor, rangeBar, sceneFor, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, rainSummary, rangeBar, sceneFor, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import WeatherIcon from "./WeatherIcon";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity } from "./storage";
 
 function Gauge({ label, value, max, color, text }: { label: string; value: number; max: number; color: string; text: string }) {
@@ -111,11 +112,25 @@ export default function App() {
         </ul>
       )}
       <p className="muted" role="status" aria-live="polite">{loading ? "Loading weather…" : ""}</p>
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && (
+        <div className="error-card" role="alert">
+          <p>{error}</p>
+          <button type="button" disabled={loading} onClick={() => void runSearch(query)}>Retry</button>
+        </div>
+      )}
+      {loading && !weather && (
+        <div className="bento" data-testid="skeleton" aria-hidden="true">
+          <div className="card skeleton hero-skeleton wide" />
+          <div className="card skeleton" />
+          <div className="card skeleton" />
+          <div className="card skeleton" />
+        </div>
+      )}
       {place && weather && (
         <>
           <section className="hero" aria-label="Current weather">
             <h2>{place.country ? `${place.name}, ${place.country}` : place.name}</h2>
+            <WeatherIcon code={weather.code} isDay={weather.isDay} size={72} />
             <p className="hero-temp">{temp(weather.temperature)}°{unit}</p>
             <p className="hero-cond">{describe(weather.code)} · wind {weather.wind} km/h</p>
             {weather.days[0] && <p className="hero-range">H:{temp(weather.days[0].max)}° L:{temp(weather.days[0].min)}°</p>}
@@ -186,7 +201,7 @@ export default function App() {
               {weather.days.map((d) => (
                 <tr key={d.date}>
                   <td>{new Date(d.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</td>
-                  <td><span role="img" aria-label={describe(d.code)}>{iconFor(d.code)}</span> {describe(d.code)}</td>
+                  <td><WeatherIcon code={d.code} /> {describe(d.code)}</td>
                   <td>{d.rain === null ? "–" : `${d.rain}%`}</td>
                   <td>{temp(d.min)}°</td>
                   <td>

@@ -85,3 +85,14 @@ main { max-width: 1080px; }
 .hourly li { flex: none; min-width: 56px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border-radius: 16px; background: rgba(255, 255, 255, 0.1); scroll-snap-align: start; }
 .hourly span { font-size: 13px; opacity: 0.8; }
 .card p { margin: 6px 0 0; }
+
+/* Icons, skeletons, error card */
+.wicon { flex: none; vertical-align: middle; }
+td .wicon { margin-right: 4px; }
+.skeleton { min-height: 140px; background: linear-gradient(100deg, rgba(255,255,255,0.1) 30%, rgba(255,255,255,0.28) 50%, rgba(255,255,255,0.1) 70%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+.hero-skeleton { min-height: 260px; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.error-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; padding: 14px 18px; border-radius: 16px; background: var(--card); border: 1px solid var(--danger); color: var(--fg); }
+.error-card p { margin: 0; }
+@media (prefers-color-scheme: dark) { :root { --danger: #ff8a80; } .error-card button { color: #11141b; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }

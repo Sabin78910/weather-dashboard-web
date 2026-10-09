@@ -234,3 +234,33 @@ test("renders a sky scene matching the weather", async () => {
   await screen.findByText(/Nepal/);
   expect(screen.getByTestId("sky")).toHaveClass("cloudy-day");
 });
+
+test("shows skeleton cards while loading, hidden from assistive tech", async () => {
+  vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+  render(<App />);
+  const sk = await screen.findByTestId("skeleton");
+  expect(sk).toHaveAttribute("aria-hidden", "true");
+  expect(sk.querySelectorAll(".skeleton").length).toBeGreaterThan(2);
+});
+
+test("error card shows message and Retry re-runs the search", async () => {
+  let fail = true;
+  const ok = mockFetch();
+  vi.stubGlobal("fetch", vi.fn((url: string) => (fail ? Promise.reject(new Error("Network down")) : ok(url))));
+  render(<App />);
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("Network down");
+  fail = false;
+  await userEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+  expect(await screen.findByText("Pokhara, Nepal")).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+test("daily forecast renders an SVG icon labelled with the condition", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  const table = await screen.findByRole("table");
+  const icon = within(table).getByRole("img", { name: "Light rain" });
+  expect(icon.tagName.toLowerCase()).toBe("svg");
+  expect(icon).toHaveAttribute("data-icon", "rain");
+});
