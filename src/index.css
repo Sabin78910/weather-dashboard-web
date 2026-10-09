@@ -96,3 +96,4 @@ td .wicon { margin-right: 4px; }
 .error-card p { margin: 0; }
 @media (prefers-color-scheme: dark) { :root { --danger: #ff8a80; } .error-card button { color: #11141b; } }
 @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+.error-card .error-art { flex: none; }
