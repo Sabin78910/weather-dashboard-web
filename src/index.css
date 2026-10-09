@@ -26,3 +26,26 @@ th, td { text-align: right; padding: 6px; border-bottom: 1px solid var(--border)
 th:first-child, td:first-child { text-align: left; }
 .range { position: relative; height: 8px; min-width: 80px; background: var(--border); border-radius: 4px; }
 .range span { position: absolute; top: 0; bottom: 0; min-width: 4px; background: var(--accent); border-radius: 4px; }
+.sky { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: var(--bg); }
+.sky::before, .sky::after { content: ""; position: absolute; inset: -50%; pointer-events: none; }
+.clear-day { background: linear-gradient(#4aa3e8, #bfe3ff); }
+.clear-night { background: linear-gradient(#050b24, #1c2a5a); }
+.cloudy-day { background: linear-gradient(#8fa3b8, #cfd8e2); }
+.cloudy-night { background: linear-gradient(#1a2030, #3a4256); }
+.rain-day { background: linear-gradient(#5d7189, #98a8b8); }
+.rain-night { background: linear-gradient(#0f1522, #2a3445); }
+.snow-day { background: linear-gradient(#aebfd0, #eef3f8); }
+.snow-night { background: linear-gradient(#1b2438, #46526b); }
+.storm-day { background: linear-gradient(#3b4658, #6c778a); }
+.storm-night { background: linear-gradient(#07090f, #232a3a); }
+.clear-day::before { inset: auto; top: 8%; right: 12%; width: 90px; height: 90px; border-radius: 50%; background: #ffe27a; box-shadow: 0 0 60px 20px #ffe27a99; animation: sky-pulse 6s ease-in-out infinite; }
+.clear-night::before { background: radial-gradient(2px 2px at 20% 30%, #fff, transparent), radial-gradient(2px 2px at 70% 20%, #fff, transparent), radial-gradient(1.5px 1.5px at 50% 60%, #fff, transparent), radial-gradient(1.5px 1.5px at 85% 70%, #fff, transparent); animation: sky-pulse 4s ease-in-out infinite; }
+[class*="cloudy-"]::before, [class*="rain-"]::before, [class*="storm-"]::before { background: radial-gradient(ellipse 200px 60px at 30% 30%, #ffffff55, transparent), radial-gradient(ellipse 260px 70px at 70% 55%, #ffffff44, transparent); animation: sky-drift 40s linear infinite alternate; }
+[class*="rain-"]::after, [class*="storm-"]::after { background: repeating-linear-gradient(105deg, transparent 0 14px, #cfe3ff66 14px 15px); animation: sky-fall 0.8s linear infinite; }
+[class*="snow-"]::after { background: radial-gradient(3px 3px at 20% 20%, #fff, transparent), radial-gradient(3px 3px at 60% 50%, #fff, transparent), radial-gradient(2px 2px at 80% 80%, #fff, transparent); background-size: 200px 200px; animation: sky-fall 8s linear infinite; }
+.storm-day::before, .storm-night::before { animation: sky-drift 40s linear infinite alternate, sky-flash 7s steps(1) infinite; }
+@keyframes sky-pulse { 50% { opacity: 0.6; } }
+@keyframes sky-drift { to { transform: translateX(8%); } }
+@keyframes sky-fall { to { transform: translateY(40px); } }
+@keyframes sky-flash { 0%, 92%, 96%, 100% { filter: none; } 93%, 97% { filter: brightness(3); } }
+@media (prefers-reduced-motion: reduce) { .sky, .sky::before, .sky::after { animation: none !important; } }

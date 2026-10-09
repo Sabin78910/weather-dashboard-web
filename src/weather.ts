@@ -1,7 +1,7 @@
 export interface Place { name: string; country: string; latitude: number; longitude: number; }
 export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; }
 export interface HourForecast { time: string; temp: number; rain?: number; }
-export interface Weather { temperature: number; wind: number; code: number; days: DayForecast[]; hours: HourForecast[]; uv: number | null; }
+export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; }
 export interface AirQuality { aqi: number; pm25: number | null; }
 
 const HOURS_AHEAD = 12;
@@ -26,6 +26,14 @@ export const iconFor = (code: number): string => {
   return "❓";
 };
 
+export type Scene = `${"clear" | "cloudy" | "rain" | "snow" | "storm"}-${"day" | "night"}`;
+
+/** Sky background scene for a weather code and time of day. */
+export function sceneFor(code: number, isDay: boolean): Scene {
+  const kind = code <= 1 ? "clear" : code >= 95 && code <= 99 ? "storm" : (code >= 51 && code <= 65) || (code >= 80 && code <= 82) ? "rain" : code >= 71 && code <= 77 ? "snow" : "cloudy";
+  return `${kind}-${isDay ? "day" : "night"}`;
+}
+
 /** Position of a day's min–max span within the week's overall range, as percentages. */
 export function rangeBar(day: { min: number; max: number }, days: { min: number; max: number }[]): { left: number; width: number } {
   const lo = Math.min(...days.map((d) => d.min));
@@ -48,7 +56,7 @@ export async function findPlace(query: string, f: Fetch = fetch): Promise<Place 
 export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
-    `&current=temperature_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,uv_index_max&hourly=temperature_2m,precipitation_probability&timezone=auto&forecast_days=7`;
+    `&current=temperature_2m,wind_speed_10m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,uv_index_max&hourly=temperature_2m,precipitation_probability&timezone=auto&forecast_days=7`;
   const res = await f(url);
   if (!res.ok) throw new Error(`Forecast failed (${res.status})`);
   const d = await res.json();
@@ -65,6 +73,7 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
     temperature: d.current.temperature_2m,
     wind: d.current.wind_speed_10m,
     code: d.current.weather_code,
+    isDay: d.current.is_day !== 0,
     days: d.daily.time.map((date: string, i: number) => ({
       date, max: d.daily.temperature_2m_max[i], min: d.daily.temperature_2m_min[i], code: d.daily.weather_code[i],
       rain: d.daily.precipitation_probability_max?.[i] ?? null,

@@ -203,3 +203,12 @@ test("loads favourites from storage", () => {
   render(<App />);
   expect(screen.getByRole("button", { name: "Oslo" })).toBeInTheDocument();
 });
+
+test("renders a sky scene matching the weather", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  expect(screen.getByTestId("sky")).toHaveClass("none");
+  await userEvent.click(screen.getByRole("button", { name: "Search" }));
+  await screen.findByText(/Nepal/);
+  expect(screen.getByTestId("sky")).toHaveClass("cloudy-day");
+});
