@@ -1,3 +1,4 @@
+import type { Lang } from "./i18n";
 import type { Place, Weather } from "./weather";
 
 const KEY = "lastCity";
@@ -56,6 +57,25 @@ export function loadForecast(): ForecastSnapshot | null {
 export function saveForecast(snapshot: ForecastSnapshot): void {
   try {
     localStorage.setItem(FORECAST_KEY, JSON.stringify(snapshot));
+  } catch {
+    // storage unavailable; ignore
+  }
+}
+
+const LANG_KEY = "lang";
+
+export function loadLang(): Lang | null {
+  try {
+    const v = localStorage.getItem(LANG_KEY);
+    return v === "en" || v === "ne" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLang(lang: Lang): void {
+  try {
+    localStorage.setItem(LANG_KEY, lang);
   } catch {
     // storage unavailable; ignore
   }

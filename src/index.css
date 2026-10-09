@@ -97,3 +97,6 @@ td .wicon { margin-right: 4px; }
 @media (prefers-color-scheme: dark) { :root { --danger: #ff8a80; } .error-card button { color: #11141b; } }
 @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
 .error-card .error-art { flex: none; }
+
+.lang-switch { display: flex; gap: 4px; justify-content: flex-end; margin-bottom: 8px; }
+.lang-switch button[aria-pressed="true"] { font-weight: 700; text-decoration: underline; }
