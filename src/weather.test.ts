@@ -1,4 +1,4 @@
-import { describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor } from "./weather";
+import { describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -212,4 +212,35 @@ test("compassPoint names wind directions", () => {
   expect(compassPoint(90)).toBe("E");
   expect(compassPoint(225)).toBe("SW");
   expect(compassPoint(-90)).toBe("W");
+});
+
+describe("dailyTips", () => {
+  const base: Parameters<typeof dailyTips>[0] = { temperature: 20, code: 1, days: [{ date: "d", max: 24, min: 16, code: 1, rain: 10 }], hours: [{ time: "2026-10-08T10:00", temp: 20 }, { time: "2026-10-08T11:00", temp: 19 }], uv: 2 };
+  const ids = (w: Partial<typeof base>, aqi: number | null = 20) => dailyTips({ ...base, ...w }, aqi).map((t) => t.id);
+
+  test("umbrella when today's rain chance is 50%+", () => {
+    expect(ids({ days: [{ ...base.days[0], rain: 50 }] })).toContain("umbrella");
+    expect(ids({ days: [{ ...base.days[0], rain: 49 }] })).not.toContain("umbrella");
+  });
+  test("sunscreen when UV is 6+", () => {
+    expect(ids({ uv: 6 })).toContain("sunscreen");
+    expect(ids({ uv: 5.9 })).not.toContain("sunscreen");
+    expect(ids({ uv: null })).not.toContain("sunscreen");
+  });
+  test("mask when air quality is poor (AQI 60+)", () => {
+    expect(ids({}, 60)).toContain("mask");
+    expect(ids({}, 59)).not.toContain("mask");
+    expect(ids({}, null)).not.toContain("mask");
+  });
+  test("jacket when temperature drops 8°+ in the coming hours", () => {
+    const hours = [{ time: "t1", temp: 20 }, { time: "t2", temp: 12 }];
+    expect(ids({ hours })).toContain("jacket");
+    expect(ids({ hours: [{ time: "t1", temp: 20 }, { time: "t2", temp: 13 }] })).not.toContain("jacket");
+  });
+  test("great day outside only when nothing else applies and weather is pleasant", () => {
+    expect(ids({})).toEqual(["great"]);
+    expect(ids({ uv: 7 })).not.toContain("great");
+    expect(ids({ code: 61 })).not.toContain("great");
+    expect(ids({ temperature: 35, days: [{ ...base.days[0], max: 36 }] })).not.toContain("great");
+  });
 });

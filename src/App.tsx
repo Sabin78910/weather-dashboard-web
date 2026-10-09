@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, rainSummary, rangeBar, sceneFor, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import WeatherIcon from "./WeatherIcon";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity } from "./storage";
 
@@ -139,6 +139,14 @@ export default function App() {
             )}
           </section>
           <div className="bento">
+            {dailyTips(weather, air?.aqi ?? null).length > 0 && (
+              <section className="card wide" aria-label="Tips for today">
+                <h2>Tips for today</h2>
+                <ul style={{ listStyle: "none", padding: 0 }}>
+                  {dailyTips(weather, air?.aqi ?? null).map((t) => <li key={t.id}><span aria-hidden="true">{t.icon}</span> {t.text}</li>)}
+                </ul>
+              </section>
+            )}
             <section className="card" aria-label="Air quality">
               <h2>Air quality</h2>
               {air ? (
