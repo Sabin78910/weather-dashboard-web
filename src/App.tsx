@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, rainSummary, iconFor, rangeBar, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, rainSummary, iconFor, rangeBar, sceneFor, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity } from "./storage";
 
 export default function App() {
@@ -81,7 +81,8 @@ export default function App() {
 
   return (
     <main>
-      <h1>Weather Dashboard</h1>
+      <div className={`sky ${weather ? sceneFor(weather.code, weather.isDay) : "none"}`} data-testid="sky" aria-hidden="true" />
+      <h1 className="card">Weather Dashboard</h1>
       <form className="row card" onSubmit={search}>
         <input aria-label="City" value={query} onChange={(e) => setQuery(e.target.value)} />
         <button type="submit" disabled={loading}>{loading ? "Loading…" : "Search"}</button>
@@ -159,7 +160,7 @@ export default function App() {
           </table>
         </>
       )}
-      <p className="muted">Data: <a href="https://open-meteo.com/">Open-Meteo</a></p>
+      <p className="muted card">Data: <a href="https://open-meteo.com/">Open-Meteo</a></p>
     </main>
   );
 }

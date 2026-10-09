@@ -1,4 +1,4 @@
-import { describe as describeCode, findPlace, getWeather, convertTemp, iconFor, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary } from "./weather";
+import { describe as describeCode, findPlace, getWeather, convertTemp, iconFor, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -146,4 +146,26 @@ test("getWeather includes hourly rain probability", async () => {
   });
   const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
   expect(w.hours.map((h) => h.rain)).toEqual([5, 60]);
+});
+
+test("sceneFor maps weather codes and time of day to a scene", () => {
+  expect(sceneFor(0, true)).toBe("clear-day");
+  expect(sceneFor(1, false)).toBe("clear-night");
+  expect(sceneFor(2, true)).toBe("cloudy-day");
+  expect(sceneFor(3, false)).toBe("cloudy-night");
+  expect(sceneFor(45, true)).toBe("cloudy-day");
+  expect(sceneFor(53, true)).toBe("rain-day");
+  expect(sceneFor(82, false)).toBe("rain-night");
+  expect(sceneFor(73, true)).toBe("snow-day");
+  expect(sceneFor(77, false)).toBe("snow-night");
+  expect(sceneFor(95, true)).toBe("storm-day");
+  expect(sceneFor(99, false)).toBe("storm-night");
+  expect(sceneFor(1234, true)).toBe("cloudy-day");
+});
+
+test("getWeather reads is_day, defaulting to day", async () => {
+  const body = (current: object) => ({ current: { temperature_2m: 1, wind_speed_10m: 1, weather_code: 0, ...current }, daily: { time: [], temperature_2m_max: [], temperature_2m_min: [], weather_code: [] } });
+  const p = { name: "K", country: "N", latitude: 1, longitude: 2 };
+  expect((await getWeather(p, (() => ok(body({ is_day: 0 }))) as unknown as typeof fetch)).isDay).toBe(false);
+  expect((await getWeather(p, (() => ok(body({}))) as unknown as typeof fetch)).isDay).toBe(true);
 });
