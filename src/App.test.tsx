@@ -47,3 +47,31 @@ test("does not save a failed search", async () => {
   await screen.findByRole("alert");
   expect(loadLastCity()).toBeNull();
 });
+
+test("my location button loads weather for current position", async () => {
+  const f = mockFetch();
+  vi.stubGlobal("fetch", f);
+  vi.stubGlobal("navigator", {
+    geolocation: { getCurrentPosition: (ok: PositionCallback) => ok({ coords: { latitude: 1, longitude: 2 } } as GeolocationPosition) },
+  });
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Use my location" }));
+  expect(await screen.findByText("My location")).toBeInTheDocument();
+  expect(String(f.mock.calls[0][0])).toContain("latitude=1");
+});
+
+test("my location shows a message when permission is denied", async () => {
+  vi.stubGlobal("navigator", {
+    geolocation: { getCurrentPosition: (_: PositionCallback, err: PositionErrorCallback) => err({ code: 1 } as GeolocationPositionError) },
+  });
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Use my location" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(/location/i);
+});
+
+test("my location shows a message when geolocation is unsupported", async () => {
+  vi.stubGlobal("navigator", {});
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Use my location" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(/not supported/i);
+});

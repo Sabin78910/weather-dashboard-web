@@ -26,6 +26,33 @@ export default function App() {
     }
   }
 
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      setError("Geolocation is not supported by this browser");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const p: Place = { name: "My location", country: "", latitude: coords.latitude, longitude: coords.longitude };
+          setPlace(p);
+          setWeather(await getWeather(p));
+        } catch (err) {
+          setError((err as Error).message);
+          setWeather(null);
+        } finally {
+          setLoading(false);
+        }
+      },
+      (err) => {
+        setError(err.code === 1 ? "Location permission denied. Search for a city instead." : "Could not determine your location");
+        setLoading(false);
+      },
+    );
+  }
+
   useEffect(() => {
     const last = loadLastCity();
     if (last) {
@@ -45,12 +72,13 @@ export default function App() {
       <form className="row card" onSubmit={search}>
         <input aria-label="City" value={query} onChange={(e) => setQuery(e.target.value)} />
         <button type="submit" disabled={loading}>{loading ? "Loading…" : "Search"}</button>
+        <button type="button" disabled={loading} onClick={useMyLocation}>Use my location</button>
       </form>
       {error && <p className="error" role="alert">{error}</p>}
       {place && weather && (
         <>
           <section className="card">
-            <h2 style={{ marginTop: 0 }}>{place.name}, {place.country}</h2>
+            <h2 style={{ marginTop: 0 }}>{place.country ? `${place.name}, ${place.country}` : place.name}</h2>
             <p style={{ fontSize: 40, margin: 0 }}>{Math.round(weather.temperature)}°C</p>
             <p className="muted">{describe(weather.code)} · wind {weather.wind} km/h</p>
           </section>
