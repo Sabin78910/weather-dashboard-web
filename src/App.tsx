@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import WeatherIcon from "./WeatherIcon";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, type ForecastSnapshot } from "./storage";
@@ -20,6 +20,19 @@ type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Pro
 // A failed fetch (rather than an HTTP/API error) means the network is unreachable.
 const isOffline = (err: unknown) => !navigator.onLine || err instanceof TypeError;
 
+export const RETRY_DELAYS_MS = [2000, 5000, 15000];
+const FRIENDLY_ERROR = "Can't reach the weather service right now";
+class NotFoundError extends Error {}
+
+function ErrorIllustration() {
+  return (
+    <svg className="error-art" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Cloud with a lightning bolt">
+      <path d="M18 46a12 12 0 0 1 1-24 16 16 0 0 1 30 4 10 10 0 0 1-2 20z" fill="#9aa5b8" />
+      <path d="M34 28l-8 12h6l-3 10 11-14h-6z" fill="#ffd54a" />
+    </svg>
+  );
+}
+
 export default function App() {
   const [query, setQuery] = useState("Kathmandu");
   const [place, setPlace] = useState<Place | null>(null);
@@ -32,23 +45,49 @@ export default function App() {
   const [cachedAt, setCachedAt] = useState<number | null>(null);
   const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const runId = useRef(0);
   const temp = (c: number) => Math.round(convertTemp(c, unit));
 
+  async function fetchForecast(city: string) {
+    const p = await findPlace(city);
+    if (!p) throw new NotFoundError(`No place found for "${city}"`);
+    return { p, w: await getWeather(p) };
+  }
+
   async function runSearch(city: string) {
+    const id = ++runId.current;
     setLoading(true);
     setError(null);
     try {
-      const p = await findPlace(city);
-      if (!p) throw new Error(`No place found for "${city}"`);
+      let result: Awaited<ReturnType<typeof fetchForecast>> | undefined;
+      let failure: unknown;
+      for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+        try {
+          result = await fetchForecast(city);
+          break;
+        } catch (err) {
+          failure = err;
+          if (err instanceof NotFoundError || attempt === RETRY_DELAYS_MS.length) break;
+          setRetrying(true);
+          await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+          if (id !== runId.current) return;
+        }
+      }
+      if (id !== runId.current) return;
+      if (!result) throw failure;
+      const { p, w } = result;
       setPlace(p);
       setAir(null);
       void getAirQuality(p).then(setAir);
-      const w = await getWeather(p);
       setWeather(w);
       setCachedAt(null);
+      setUpdatedAt(Date.now());
       saveLastCity(city);
       saveForecast({ place: p, weather: w, savedAt: Date.now() });
     } catch (err) {
+      if (id !== runId.current) return;
       const cached: ForecastSnapshot | null = loadForecast();
       if (cached && isOffline(err)) {
         setPlace(cached.place);
@@ -56,11 +95,14 @@ export default function App() {
         setCachedAt(cached.savedAt);
         setError(null);
       } else {
-        setError((err as Error).message);
+        setError(err instanceof NotFoundError ? err.message : FRIENDLY_ERROR);
         setWeather(null);
       }
     } finally {
-      setLoading(false);
+      if (id === runId.current) {
+        setLoading(false);
+        setRetrying(false);
+      }
     }
   }
 
@@ -79,8 +121,8 @@ export default function App() {
           setAir(null);
           void getAirQuality(p).then(setAir);
           setWeather(await getWeather(p));
-        } catch (err) {
-          setError((err as Error).message);
+        } catch {
+          setError(FRIENDLY_ERROR);
           setWeather(null);
         } finally {
           setLoading(false);
@@ -134,6 +176,8 @@ export default function App() {
     const city = loadLastCity() ?? "Kathmandu";
     setQuery(city);
     void runSearch(city);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally invalidates the latest run on unmount
+    return () => { runId.current++; };
   }, []);
 
   function search(e: React.FormEvent) {
@@ -166,6 +210,7 @@ export default function App() {
       <p className="muted" role="status" aria-live="polite">{loading ? "Loading weather…" : ""}</p>
       {error && (
         <div className="error-card" role="alert">
+          {error === FRIENDLY_ERROR && <ErrorIllustration />}
           <p>{error}</p>
           <button type="button" disabled={loading} onClick={() => void runSearch(query)}>Retry</button>
         </div>
@@ -178,6 +223,7 @@ export default function App() {
           <div className="card skeleton" />
         </div>
       )}
+      {retrying && <p className="muted" role="status">Having trouble connecting, retrying…{updatedAt !== null && ` Last updated ${new Date(updatedAt).toLocaleString()}`}</p>}
       {cachedAt !== null && <p className="muted" role="status">Offline · last updated {new Date(cachedAt).toLocaleString()}</p>}
       {place && weather && (
         <>

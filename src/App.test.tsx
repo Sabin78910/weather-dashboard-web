@@ -243,17 +243,78 @@ test("shows skeleton cards while loading, hidden from assistive tech", async () 
   expect(sk.querySelectorAll(".skeleton").length).toBeGreaterThan(2);
 });
 
-test("error card shows message and Retry re-runs the search", async () => {
-  let fail = true;
-  const ok = mockFetch();
-  vi.stubGlobal("fetch", vi.fn((url: string) => (fail ? Promise.reject(new Error("Network down")) : ok(url))));
-  render(<App />);
-  const alert = await screen.findByRole("alert");
-  expect(alert).toHaveTextContent("Network down");
-  fail = false;
-  await userEvent.click(within(alert).getByRole("button", { name: "Retry" }));
-  expect(await screen.findByText("Pokhara, Nepal")).toBeInTheDocument();
-  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+test("error card is friendly and Retry re-runs the search", async () => {
+  vi.useFakeTimers();
+  try {
+    let fail = true;
+    const ok = mockFetch();
+    vi.stubGlobal("fetch", vi.fn((url: string) => (fail ? Promise.reject(new Error("Network down")) : ok(url))));
+    render(<App />);
+    await act(() => vi.advanceTimersByTimeAsync(22000));
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Can't reach the weather service right now");
+    expect(alert).not.toHaveTextContent("Network down");
+    expect(within(alert).getByRole("img")).toBeInTheDocument();
+    fail = false;
+    await act(async () => { within(alert).getByRole("button", { name: "Retry" }).click(); });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText("Pokhara, Nepal")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("retries with 2s, 5s and 15s backoff before showing the error", async () => {
+  vi.useFakeTimers();
+  try {
+    const f = vi.fn(() => Promise.reject(new Error("boom")));
+    vi.stubGlobal("fetch", f);
+    render(<App />);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/retrying/i)).toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(1999));
+    expect(f).toHaveBeenCalledTimes(1);
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(f).toHaveBeenCalledTimes(2);
+    await act(() => vi.advanceTimersByTimeAsync(4999));
+    expect(f).toHaveBeenCalledTimes(2);
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(f).toHaveBeenCalledTimes(3);
+    await act(() => vi.advanceTimersByTimeAsync(14999));
+    expect(f).toHaveBeenCalledTimes(3);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(f).toHaveBeenCalledTimes(4);
+    expect(screen.getByRole("alert")).toHaveTextContent("Can't reach the weather service right now");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a later success during retries clears the error and keeps the forecast visible meanwhile", async () => {
+  vi.useFakeTimers();
+  try {
+    const ok = mockFetch();
+    let fail = false;
+    vi.stubGlobal("fetch", vi.fn((url: string) => (fail ? Promise.reject(new Error("boom")) : ok(url))));
+    render(<App />);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText("Pokhara, Nepal")).toBeInTheDocument();
+    fail = true;
+    await act(async () => { screen.getByRole("button", { name: "Search" }).click(); });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText("Pokhara, Nepal")).toBeInTheDocument();
+    expect(screen.getByText(/Last updated/)).toBeInTheDocument();
+    fail = false;
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(screen.getByText("Pokhara, Nepal")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText(/retrying/i)).not.toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("daily forecast renders an SVG icon labelled with the condition", async () => {
@@ -280,8 +341,14 @@ test("shows the cached forecast with a last-updated note when offline", async ()
   expect(await screen.findByText("Pokhara, Nepal")).toBeInTheDocument();
   unmount();
   vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))));
-  render(<App />);
-  expect(await screen.findByText("Pokhara, Nepal")).toBeInTheDocument();
+  vi.useFakeTimers();
+  try {
+    render(<App />);
+    await act(() => vi.advanceTimersByTimeAsync(22000));
+  } finally {
+    vi.useRealTimers();
+  }
+  expect(screen.getByText("Pokhara, Nepal")).toBeInTheDocument();
   expect(screen.getByText(/Offline · last updated/)).toBeInTheDocument();
 });
 
