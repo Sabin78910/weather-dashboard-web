@@ -179,3 +179,27 @@ test("still shows weather and UV when the air quality API fails", async () => {
   expect(within(card).getByText(/UV 8/)).toBeInTheDocument();
   expect(screen.queryByRole("alert")).toBeNull();
 });
+
+test("stars a city, persists it, switches via chip and removes it", async () => {
+  const f = mockFetch();
+  vi.stubGlobal("fetch", f);
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Search" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Save Pokhara to favourites" }));
+  expect(JSON.parse(localStorage.getItem("favourites")!)).toEqual(["Pokhara"]);
+  const chip = screen.getByRole("button", { name: "Pokhara" });
+  const before = f.mock.calls.length;
+  await userEvent.click(chip);
+  await screen.findByText("Pokhara, Nepal");
+  expect(f.mock.calls.length).toBeGreaterThan(before);
+  await userEvent.click(screen.getByRole("button", { name: "Remove Pokhara from favourites" }));
+  expect(screen.queryByRole("button", { name: "Pokhara" })).not.toBeInTheDocument();
+  expect(JSON.parse(localStorage.getItem("favourites")!)).toEqual([]);
+});
+
+test("loads favourites from storage", () => {
+  localStorage.setItem("favourites", '["Oslo"]');
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  expect(screen.getByRole("button", { name: "Oslo" })).toBeInTheDocument();
+});
