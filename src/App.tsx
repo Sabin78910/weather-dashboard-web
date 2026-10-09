@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { describe, findPlace, getWeather, type Place, type Weather } from "./weather";
+import { convertTemp, describe, findPlace, getWeather, type Place, type Unit, type Weather } from "./weather";
 import { loadLastCity, saveLastCity } from "./storage";
 
 export default function App() {
@@ -8,6 +8,8 @@ export default function App() {
   const [weather, setWeather] = useState<Weather | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [unit, setUnit] = useState<Unit>("C");
+  const temp = (c: number) => Math.round(convertTemp(c, unit));
 
   async function runSearch(city: string) {
     setLoading(true);
@@ -73,13 +75,14 @@ export default function App() {
         <input aria-label="City" value={query} onChange={(e) => setQuery(e.target.value)} />
         <button type="submit" disabled={loading}>{loading ? "Loading…" : "Search"}</button>
         <button type="button" disabled={loading} onClick={useMyLocation}>Use my location</button>
+        <button type="button" onClick={() => setUnit(unit === "C" ? "F" : "C")}>Switch to °{unit === "C" ? "F" : "C"}</button>
       </form>
       {error && <p className="error" role="alert">{error}</p>}
       {place && weather && (
         <>
           <section className="card">
             <h2 style={{ marginTop: 0 }}>{place.country ? `${place.name}, ${place.country}` : place.name}</h2>
-            <p style={{ fontSize: 40, margin: 0 }}>{Math.round(weather.temperature)}°C</p>
+            <p style={{ fontSize: 40, margin: 0 }}>{temp(weather.temperature)}°{unit}</p>
             <p className="muted">{describe(weather.code)} · wind {weather.wind} km/h</p>
           </section>
           <table className="card">
@@ -88,7 +91,7 @@ export default function App() {
               {weather.days.map((d) => (
                 <tr key={d.date}>
                   <td>{new Date(d.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</td>
-                  <td>{describe(d.code)}</td><td>{Math.round(d.min)}°</td><td>{Math.round(d.max)}°</td>
+                  <td>{describe(d.code)}</td><td>{temp(d.min)}°</td><td>{temp(d.max)}°</td>
                 </tr>
               ))}
             </tbody>
