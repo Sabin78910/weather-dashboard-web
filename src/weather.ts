@@ -1,6 +1,9 @@
 export interface Place { name: string; country: string; latitude: number; longitude: number; }
 export interface DayForecast { date: string; max: number; min: number; code: number; }
-export interface Weather { temperature: number; wind: number; code: number; days: DayForecast[]; }
+export interface HourForecast { time: string; temp: number; }
+export interface Weather { temperature: number; wind: number; code: number; days: DayForecast[]; hours: HourForecast[]; }
+
+const HOURS_AHEAD = 12;
 
 const CODES: Record<number, string> = {
   0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Rime fog",
@@ -24,10 +27,16 @@ export async function findPlace(query: string, f: Fetch = fetch): Promise<Place 
 export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
-    `&current=temperature_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto`;
+    `&current=temperature_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&hourly=temperature_2m&timezone=auto`;
   const res = await f(url);
   if (!res.ok) throw new Error(`Forecast failed (${res.status})`);
   const d = await res.json();
+  const times: string[] = d.hourly?.time ?? [];
+  const nowHour: string = (d.current.time ?? times[0] ?? "").slice(0, 13);
+  const start = Math.max(0, times.findIndex((t) => t.slice(0, 13) >= nowHour));
+  const hours: HourForecast[] = times
+    .map((time, i) => ({ time, temp: d.hourly.temperature_2m[i] as number }))
+    .slice(start, start + HOURS_AHEAD);
   return {
     temperature: d.current.temperature_2m,
     wind: d.current.wind_speed_10m,
@@ -35,6 +44,7 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
     days: d.daily.time.map((date: string, i: number) => ({
       date, max: d.daily.temperature_2m_max[i], min: d.daily.temperature_2m_min[i], code: d.daily.weather_code[i],
     })),
+    hours,
   };
 }
 

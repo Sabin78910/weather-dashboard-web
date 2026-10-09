@@ -22,6 +22,30 @@ test("getWeather builds daily forecast", async () => {
   expect(w.days).toEqual([{ date: "2026-10-08", max: 25, min: 14, code: 61 }]);
 });
 
+test("getWeather requests hourly temperature and returns the next 12 hours", async () => {
+  const time = Array.from({ length: 24 }, (_, i) => `2026-10-08T${String(i).padStart(2, "0")}:00`);
+  const f = vi.fn(() => ok({
+    current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 },
+    daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61] },
+    hourly: { time, temperature_2m: time.map((_, i) => i) },
+  }));
+  const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
+  expect(String((f.mock.calls[0] as unknown[])[0])).toContain("hourly=temperature_2m");
+  expect(w.hours).toHaveLength(12);
+  expect(w.hours[0]).toEqual({ time: "2026-10-08T10:00", temp: 10 });
+  expect(w.hours[11]).toEqual({ time: "2026-10-08T21:00", temp: 21 });
+});
+
+test("getWeather returns fewer hours when data runs out", async () => {
+  const f = () => ok({
+    current: { time: "2026-10-08T22:00", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 },
+    daily: { time: [], temperature_2m_max: [], temperature_2m_min: [], weather_code: [] },
+    hourly: { time: ["2026-10-08T21:00", "2026-10-08T22:00", "2026-10-08T23:00"], temperature_2m: [1, 2, 3] },
+  });
+  const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
+  expect(w.hours).toEqual([{ time: "2026-10-08T22:00", temp: 2 }, { time: "2026-10-08T23:00", temp: 3 }]);
+});
+
 test("convertTemp converts between units", () => {
   expect(convertTemp(0, "F")).toBe(32);
   expect(convertTemp(100, "F")).toBe(212);

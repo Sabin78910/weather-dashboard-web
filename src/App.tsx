@@ -85,6 +85,16 @@ export default function App() {
             <p style={{ fontSize: 40, margin: 0 }}>{temp(weather.temperature)}°{unit}</p>
             <p className="muted">{describe(weather.code)} · wind {weather.wind} km/h</p>
           </section>
+          <table className="card" aria-label="Hourly forecast">
+            <thead><tr><th>Hour</th><th>Temp</th></tr></thead>
+            <tbody>
+              {weather.hours.map((h) => (
+                <tr key={h.time}>
+                  <td>{h.time.slice(11, 16)}</td><td>{temp(h.temp)}°</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           <table className="card">
             <thead><tr><th>Day</th><th>Conditions</th><th>Min</th><th>Max</th></tr></thead>
             <tbody>
