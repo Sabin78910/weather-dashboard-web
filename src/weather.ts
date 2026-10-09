@@ -166,3 +166,22 @@ export const UV_GAUGE_MAX = 11;
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 /** Compass point for a wind direction in degrees (direction the wind comes from). */
 export const compassPoint = (deg: number): string => COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+
+export interface Tip { id: "umbrella" | "sunscreen" | "mask" | "jacket" | "great"; icon: string; text: string; }
+
+const TIP_UV = 6;
+const TIP_AQI = 60;
+const TIP_DROP = 8;
+
+/** Actionable tips for today from the forecast and (optional) air quality. */
+export function dailyTips(w: Pick<Weather, "temperature" | "code" | "days" | "hours" | "uv">, aqi: number | null): Tip[] {
+  const tips: Tip[] = [];
+  const today = w.days[0];
+  if (today?.rain != null && today.rain >= RAIN_THRESHOLD) tips.push({ id: "umbrella", icon: "☂️", text: `Take an umbrella: ${today.rain}% chance of rain today.` });
+  if (w.uv !== null && w.uv >= TIP_UV) tips.push({ id: "sunscreen", icon: "🧴", text: `Wear sunscreen: UV index is ${w.uv}.` });
+  if (aqi !== null && aqi >= TIP_AQI) tips.push({ id: "mask", icon: "😷", text: "Consider a mask: air quality is poor." });
+  if (w.hours.length && w.temperature - Math.min(...w.hours.map((h) => h.temp)) >= TIP_DROP) tips.push({ id: "jacket", icon: "🧥", text: "Bring a jacket: temperatures will drop later." });
+  const pleasant = w.code <= 2 && !!today && today.max <= 30 && today.min >= 10;
+  if (!tips.length && pleasant) tips.push({ id: "great", icon: "🌤️", text: "Great day to be outside!" });
+  return tips;
+}

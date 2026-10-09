@@ -264,3 +264,11 @@ test("daily forecast renders an SVG icon labelled with the condition", async () 
   expect(icon.tagName.toLowerCase()).toBe("svg");
   expect(icon).toHaveAttribute("data-icon", "rain");
 });
+
+test("shows tip cards for today", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Search" }));
+  const tips = await screen.findByRole("region", { name: "Tips for today" });
+  expect(within(tips).getByText(/umbrella/i)).toBeInTheDocument();
+});
