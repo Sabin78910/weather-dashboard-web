@@ -1,4 +1,4 @@
-import { describe as describeCode, findPlace, getWeather } from "./weather";
+import { describe as describeCode, findPlace, getWeather, convertTemp } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -20,4 +20,11 @@ test("getWeather builds daily forecast", async () => {
   });
   const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
   expect(w.days).toEqual([{ date: "2026-10-08", max: 25, min: 14, code: 61 }]);
+});
+
+test("convertTemp converts between units", () => {
+  expect(convertTemp(0, "F")).toBe(32);
+  expect(convertTemp(100, "F")).toBe(212);
+  expect(convertTemp(-40, "F")).toBe(-40);
+  expect(convertTemp(21, "C")).toBe(21);
 });
