@@ -24,3 +24,5 @@ ul.list li { display: flex; justify-content: space-between; align-items: center;
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: right; padding: 6px; border-bottom: 1px solid var(--border); }
 th:first-child, td:first-child { text-align: left; }
+.range { position: relative; height: 8px; min-width: 80px; background: var(--border); border-radius: 4px; }
+.range span { position: absolute; top: 0; bottom: 0; min-width: 4px; background: var(--accent); border-radius: 4px; }

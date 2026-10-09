@@ -1,4 +1,4 @@
-import { describe as describeCode, findPlace, getWeather, convertTemp } from "./weather";
+import { describe as describeCode, findPlace, getWeather, convertTemp, iconFor, rangeBar } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -16,10 +16,10 @@ test("findPlace parses geocoding result", async () => {
 test("getWeather builds daily forecast", async () => {
   const f = () => ok({
     current: { temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 },
-    daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61] },
+    daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], precipitation_probability_max: [80] },
   });
   const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
-  expect(w.days).toEqual([{ date: "2026-10-08", max: 25, min: 14, code: 61 }]);
+  expect(w.days).toEqual([{ date: "2026-10-08", max: 25, min: 14, code: 61, rain: 80 }]);
 });
 
 test("getWeather requests hourly temperature and returns the next 12 hours", async () => {
@@ -51,4 +51,31 @@ test("convertTemp converts between units", () => {
   expect(convertTemp(100, "F")).toBe(212);
   expect(convertTemp(-40, "F")).toBe(-40);
   expect(convertTemp(21, "C")).toBe(21);
+});
+
+test("getWeather requests 7 days with rain chance and tolerates missing rain data", async () => {
+  const f = vi.fn(() => ok({
+    current: { temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 },
+    daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61] },
+  }));
+  const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
+  const url = String((f.mock.calls[0] as unknown[])[0]);
+  expect(url).toContain("precipitation_probability_max");
+  expect(url).toContain("forecast_days=7");
+  expect(w.days[0].rain).toBeNull();
+});
+
+test("iconFor maps codes to icons", () => {
+  expect(iconFor(0)).toBe("☀️");
+  expect(iconFor(63)).toBe("🌧️");
+  expect(iconFor(73)).toBe("❄️");
+  expect(iconFor(95)).toBe("⛈️");
+  expect(iconFor(1234)).toBe("❓");
+});
+
+test("rangeBar positions a day within the week's range", () => {
+  const days = [{ min: 0, max: 10 }, { min: 5, max: 20 }];
+  expect(rangeBar(days[0], days)).toEqual({ left: 0, width: 50 });
+  expect(rangeBar(days[1], days)).toEqual({ left: 25, width: 75 });
+  expect(rangeBar({ min: 3, max: 3 }, [{ min: 3, max: 3 }])).toEqual({ left: 0, width: 100 });
 });
