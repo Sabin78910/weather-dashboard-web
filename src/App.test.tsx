@@ -297,3 +297,26 @@ test("install button appears on beforeinstallprompt and triggers the prompt", as
   expect(prompt).toHaveBeenCalled();
   await waitFor(() => expect(screen.queryByRole("button", { name: "Install app" })).not.toBeInTheDocument());
 });
+
+test("share button uses the Web Share API with text and link", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  const share = vi.fn(() => Promise.resolve());
+  Object.defineProperty(navigator, "share", { value: share, configurable: true });
+  render(<App />);
+  await screen.findByText("Pokhara, Nepal");
+  await userEvent.click(screen.getByRole("button", { name: "Share forecast" }));
+  expect(share).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining("Pokhara, Nepal"), url: window.location.href }));
+  delete (navigator as { share?: unknown }).share;
+});
+
+test("share button falls back to copying to the clipboard", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  const writeText = vi.fn(() => Promise.resolve());
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  render(<App />);
+  await screen.findByText("Pokhara, Nepal");
+  await userEvent.click(screen.getByRole("button", { name: "Share forecast" }));
+  expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Pokhara, Nepal"));
+  expect(writeText).toHaveBeenCalledWith(expect.stringContaining(window.location.href));
+  expect(await screen.findByText("Copied to clipboard")).toBeInTheDocument();
+});

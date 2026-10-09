@@ -185,3 +185,11 @@ export function dailyTips(w: Pick<Weather, "temperature" | "code" | "days" | "ho
   if (!tips.length && pleasant) tips.push({ id: "great", icon: "🌤️", text: "Great day to be outside!" });
   return tips;
 }
+
+export function shareSummary(place: Place, w: Pick<Weather, "temperature" | "code" | "days">, unit: Unit): string {
+  const t = (c: number) => Math.round(convertTemp(c, unit));
+  const where = place.country ? `${place.name}, ${place.country}` : place.name;
+  const day = w.days[0];
+  const range = day ? ` H:${t(day.max)}° L:${t(day.min)}°` : "";
+  return `Today in ${where}: ${describe(w.code)}, ${t(w.temperature)}°${unit}.${range}`;
+}

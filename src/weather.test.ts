@@ -1,4 +1,4 @@
-import { describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips } from "./weather";
+import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -243,4 +243,11 @@ describe("dailyTips", () => {
     expect(ids({ code: 61 })).not.toContain("great");
     expect(ids({ temperature: 35, days: [{ ...base.days[0], max: 36 }] })).not.toContain("great");
   });
+});
+
+test("shareSummary builds a text summary in the chosen unit", () => {
+  const w = { temperature: 21, code: 2, days: [{ date: "d", max: 25, min: 14, code: 61, rain: 80 }] };
+  const p = { name: "Pokhara", country: "Nepal", latitude: 1, longitude: 2 };
+  expect(shareSummary(p, w, "C")).toBe("Today in Pokhara, Nepal: Partly cloudy, 21°C. H:25° L:14°");
+  expect(shareSummary(p, w, "F")).toBe("Today in Pokhara, Nepal: Partly cloudy, 70°F. H:77° L:57°");
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import WeatherIcon from "./WeatherIcon";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, type ForecastSnapshot } from "./storage";
 
@@ -31,6 +31,7 @@ export default function App() {
   const [unit, setUnit] = useState<Unit>("C");
   const [cachedAt, setCachedAt] = useState<number | null>(null);
   const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(null);
+  const [shareNote, setShareNote] = useState<string | null>(null);
   const temp = (c: number) => Math.round(convertTemp(c, unit));
 
   async function runSearch(city: string) {
@@ -95,6 +96,22 @@ export default function App() {
   function updateFavourites(next: string[]) {
     setFavourites(next);
     saveFavourites(next);
+  }
+
+  async function share() {
+    if (!place || !weather) return;
+    const text = shareSummary(place, weather, unit);
+    const url = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Weather Dashboard", text, url });
+      } else {
+        await navigator.clipboard.writeText(`${text} ${url}`);
+        setShareNote("Copied to clipboard");
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") setShareNote("Could not share");
+    }
   }
 
   useEffect(() => {
@@ -170,6 +187,8 @@ export default function App() {
             <p className="hero-temp">{temp(weather.temperature)}°{unit}</p>
             <p className="hero-cond">{describe(weather.code)} · wind {weather.wind} km/h</p>
             {weather.days[0] && <p className="hero-range">H:{temp(weather.days[0].max)}° L:{temp(weather.days[0].min)}°</p>}
+            <button type="button" aria-label="Share forecast" onClick={() => { setShareNote(null); void share(); }}>Share</button>
+            {shareNote && <p className="muted" role="status">{shareNote}</p>}
             {place.name !== "My location" && !favourites.includes(place.name) && (
               <button type="button" aria-label={`Save ${place.name} to favourites`} onClick={() => updateFavourites([...favourites, place.name])}>☆ Save</button>
             )}
