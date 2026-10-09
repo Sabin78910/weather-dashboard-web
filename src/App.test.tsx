@@ -9,8 +9,8 @@ const mockFetch = () =>
     url.includes("geocoding")
       ? json({ results: [{ name: "Pokhara", country: "Nepal", latitude: 1, longitude: 2 }] })
       : json({
-          current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 },
-          daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], precipitation_probability_max: [80] },
+          current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2, wind_direction_10m: 90 },
+          daily: { time: ["2026-10-08"], sunrise: ["2026-10-08T06:00"], sunset: ["2026-10-08T18:00"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], precipitation_probability_max: [80] },
           hourly: {
             time: Array.from({ length: 24 }, (_, i) => `2026-10-08T${String(i).padStart(2, "0")}:00`),
             temperature_2m: Array.from({ length: 24 }, (_, i) => i * 10),
@@ -107,30 +107,37 @@ test("unit toggle switches all temperatures between °C and °F", async () => {
   expect(screen.getByText("21°C")).toBeInTheDocument();
 });
 
-test("shows the next 12 hours in a table and respects the unit", async () => {
+test("shows the next 12 hours in a strip and respects the unit", async () => {
   vi.stubGlobal("fetch", mockFetch());
   render(<App />);
   await userEvent.click(screen.getByRole("button", { name: "Search" }));
-  const table = await screen.findByRole("table", { name: "Hourly forecast" });
-  expect(within(table).getAllByRole("row")).toHaveLength(13);
-  expect(within(table).getByText("100°")).toBeInTheDocument();
+  const strip = await screen.findByRole("list", { name: "Hourly forecast" });
+  expect(within(strip).getAllByRole("listitem")).toHaveLength(12);
+  expect(within(strip).getByText("100°")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "Switch to °F" }));
-  expect(within(table).getByText("212°")).toBeInTheDocument();
+  expect(within(strip).getByText("212°")).toBeInTheDocument();
 });
 
-test("forecast tables have captions and scope=col headers", async () => {
+test("daily forecast table has a caption and scope=col headers", async () => {
   vi.stubGlobal("fetch", mockFetch());
   render(<App />);
   await userEvent.click(screen.getByRole("button", { name: "Search" }));
   const tables = await screen.findAllByRole("table");
-  expect(tables).toHaveLength(2);
-  for (const t of tables) {
-    expect(t.querySelector("caption")).toBeInTheDocument();
-    const headers = within(t).getAllByRole("columnheader");
-    headers.forEach((h) => expect(h).toHaveAttribute("scope", "col"));
-  }
-  expect(screen.getByRole("table", { name: "Hourly forecast" })).toBeInTheDocument();
+  expect(tables).toHaveLength(1);
+  expect(tables[0].querySelector("caption")).toBeInTheDocument();
+  within(tables[0]).getAllByRole("columnheader").forEach((h) => expect(h).toHaveAttribute("scope", "col"));
   expect(screen.getByRole("table", { name: "Daily forecast" })).toBeInTheDocument();
+});
+
+test("shows wind compass, sunrise/sunset and gauge cards", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Search" }));
+  const wind = await screen.findByRole("region", { name: "Wind" });
+  expect(within(wind).getByText(/5 km\/h · E/)).toBeInTheDocument();
+  const sun = screen.getByRole("region", { name: "Sunrise and sunset" });
+  expect(within(sun).getByText(/06:00/)).toBeInTheDocument();
+  expect(within(sun).getByText(/18:00/)).toBeInTheDocument();
 });
 
 test("daily forecast shows icon, rain chance and a range bar, in the chosen unit", async () => {
@@ -175,20 +182,23 @@ test("shows an air quality and UV card with advice", async () => {
   vi.stubGlobal("fetch", withAir(() => json({ current: { european_aqi: 42, pm2_5: 11.5 } })));
   render(<App />);
   await userEvent.click(screen.getByRole("button", { name: "Search" }));
-  const card = await screen.findByRole("region", { name: "Air quality and UV" });
+  const card = await screen.findByRole("region", { name: "Air quality" });
   expect(await within(card).findByText(/AQI 42/)).toBeInTheDocument();
   expect(within(card).getByText(/PM2\.5 11\.5/)).toBeInTheDocument();
-  expect(within(card).getByText(/UV 8/)).toBeInTheDocument();
-  expect(within(card).getByText(/sunscreen/i)).toBeInTheDocument();
+  expect(within(card).getByRole("meter", { name: "Air quality index" })).toHaveAttribute("aria-valuenow", "42");
+  const uv = screen.getByRole("region", { name: "UV index" });
+  expect(within(uv).getByText(/UV 8/)).toBeInTheDocument();
+  expect(within(uv).getByRole("meter", { name: "UV level" })).toHaveAttribute("aria-valuenow", "8");
+  expect(within(uv).getByText(/sunscreen/i)).toBeInTheDocument();
 });
 
 test("still shows weather and UV when the air quality API fails", async () => {
   vi.stubGlobal("fetch", withAir(() => Promise.resolve({ ok: false, status: 500 } as Response)));
   render(<App />);
   await userEvent.click(screen.getByRole("button", { name: "Search" }));
-  const card = await screen.findByRole("region", { name: "Air quality and UV" });
+  const card = await screen.findByRole("region", { name: "Air quality" });
   expect(within(card).getByText(/Air quality unavailable/)).toBeInTheDocument();
-  expect(within(card).getByText(/UV 8/)).toBeInTheDocument();
+  expect(within(screen.getByRole("region", { name: "UV index" })).getByText(/UV 8/)).toBeInTheDocument();
   expect(screen.queryByRole("alert")).toBeNull();
 });
 

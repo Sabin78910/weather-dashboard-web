@@ -66,3 +66,22 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outlin
 .hero p { margin: 4px 0; }
 .hero-cond { font-size: 20px; }
 .hero-range { font-size: 18px; }
+
+/* Glass bento cards */
+.card { background: rgba(255, 255, 255, 0.12); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 24px; padding: 20px; margin-bottom: 0; color: #fff; }
+.card h2 { margin: 0 0 8px; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.8; }
+.card .muted, .card caption { color: rgba(255, 255, 255, 0.75); }
+.card a { color: #fff; }
+.card th, .card td { border-bottom-color: rgba(255, 255, 255, 0.2); }
+.card .range { background: rgba(255, 255, 255, 0.25); }
+.card .range span { background: #fff; }
+main { max-width: 1080px; }
+.bento { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 16px; }
+@media (min-width: 640px) { .bento { grid-template-columns: repeat(2, 1fr); } .bento .wide { grid-column: 1 / -1; } }
+@media (min-width: 1000px) { .bento { grid-template-columns: repeat(3, 1fr); } }
+.gauge { width: 100%; max-width: 200px; display: block; }
+.compass { width: 100%; max-width: 120px; display: block; }
+.hourly { display: flex; gap: 8px; overflow-x: auto; list-style: none; margin: 0; padding: 0 0 8px; scroll-snap-type: x proximity; }
+.hourly li { flex: none; min-width: 56px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border-radius: 16px; background: rgba(255, 255, 255, 0.1); scroll-snap-align: start; }
+.hourly span { font-size: 13px; opacity: 0.8; }
+.card p { margin: 6px 0 0; }

@@ -1,6 +1,18 @@
 import { useEffect, useState } from "react";
-import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, rainSummary, iconFor, rangeBar, sceneFor, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, rainSummary, iconFor, rangeBar, sceneFor, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity } from "./storage";
+
+function Gauge({ label, value, max, color, text }: { label: string; value: number; max: number; color: string; text: string }) {
+  const f = gaugeFraction(value, max);
+  const end = arcPoint(f, 50, 50, 40);
+  return (
+    <svg className="gauge" viewBox="0 0 100 60" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={value}>
+      <path d="M10 50 A40 40 0 0 1 90 50" fill="none" stroke="#ffffff33" strokeWidth="8" strokeLinecap="round" />
+      {f > 0 && <path d={`M10 50 A40 40 0 0 1 ${end.x} ${end.y}`} fill="none" stroke={color} strokeWidth="8" strokeLinecap="round" />}
+      <text x="50" y="48" textAnchor="middle" fontSize="14" fill="currentColor">{text}</text>
+    </svg>
+  );
+}
 
 export default function App() {
   const [query, setQuery] = useState("Kathmandu");
@@ -111,33 +123,63 @@ export default function App() {
               <button type="button" aria-label={`Save ${place.name} to favourites`} onClick={() => updateFavourites([...favourites, place.name])}>☆ Save</button>
             )}
           </section>
-          <section className="card" aria-label="Air quality and UV">
-            <h2 style={{ marginTop: 0 }}>Air quality &amp; UV</h2>
-            <p>
+          <div className="bento">
+            <section className="card" aria-label="Air quality">
+              <h2>Air quality</h2>
               {air ? (
-                <span style={{ color: aqiLevel(air.aqi).color, fontWeight: 600 }}>
-                  AQI {air.aqi} · {aqiLevel(air.aqi).label}{air.pm25 !== null && ` · PM2.5 ${air.pm25} µg/m³`}
-                </span>
-              ) : <span className="muted">Air quality unavailable</span>}
-            </p>
-            {weather.uv !== null && (
-              <p><span style={{ color: uvLevel(weather.uv).color, fontWeight: 600 }}>UV {weather.uv} · {uvLevel(weather.uv).label}</span></p>
-            )}
-            <p className="muted">{healthAdvice(air?.aqi ?? null, weather.uv)}</p>
-          </section>
-          {rainSummary(weather.hours) && <p className="card">{rainSummary(weather.hours)}</p>}
-          <table className="card">
-            <caption>Hourly forecast</caption>
-            <thead><tr><th scope="col">Hour</th><th scope="col">Temp</th></tr></thead>
-            <tbody>
-              {weather.hours.map((h) => (
-                <tr key={h.time}>
-                  <td>{h.time.slice(11, 16)}</td><td>{temp(h.temp)}°</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <table className="card">
+                <>
+                  <Gauge label="Air quality index" value={air.aqi} max={AQI_GAUGE_MAX} color={aqiLevel(air.aqi).color} text={String(air.aqi)} />
+                  <p style={{ color: aqiLevel(air.aqi).color, fontWeight: 600 }}>
+                    AQI {air.aqi} · {aqiLevel(air.aqi).label}{air.pm25 !== null && ` · PM2.5 ${air.pm25} µg/m³`}
+                  </p>
+                </>
+              ) : <p className="muted">Air quality unavailable</p>}
+            </section>
+            <section className="card" aria-label="UV index">
+              <h2>UV index</h2>
+              {weather.uv !== null && (
+                <>
+                  <Gauge label="UV level" value={weather.uv} max={UV_GAUGE_MAX} color={uvLevel(weather.uv).color} text={String(weather.uv)} />
+                  <p style={{ color: uvLevel(weather.uv).color, fontWeight: 600 }}>UV {weather.uv} · {uvLevel(weather.uv).label}</p>
+                </>
+              )}
+              <p className="muted">{healthAdvice(air?.aqi ?? null, weather.uv)}</p>
+            </section>
+            <section className="card" aria-label="Wind">
+              <h2>Wind</h2>
+              {weather.windDir !== null && (
+                <svg className="compass" viewBox="0 0 100 100" aria-hidden="true">
+                  <circle cx="50" cy="50" r="44" fill="none" stroke="#ffffff55" strokeWidth="2" />
+                  <text x="50" y="16" textAnchor="middle" fontSize="10" fill="currentColor">N</text>
+                  <polygon points="50,24 58,56 50,50 42,56" fill="currentColor" transform={`rotate(${(weather.windDir + 180) % 360} 50 50)`} />
+                </svg>
+              )}
+              <p>{weather.wind} km/h{weather.windDir !== null && ` · ${compassPoint(weather.windDir)}`}</p>
+            </section>
+            {weather.sunrise && weather.sunset && weather.now && (() => {
+              const pt = arcPoint(sunProgress(weather.now, weather.sunrise, weather.sunset), 50, 50, 40);
+              return (
+                <section className="card" aria-label="Sunrise and sunset">
+                  <h2>Sun</h2>
+                  <svg className="gauge" viewBox="0 0 100 60" aria-hidden="true">
+                    <path d="M10 50 A40 40 0 0 1 90 50" fill="none" stroke="#ffffff55" strokeWidth="2" strokeDasharray="3 3" />
+                    <line x1="5" y1="50" x2="95" y2="50" stroke="#ffffff55" />
+                    <circle cx={pt.x} cy={pt.y} r="5" fill="#ffe27a" />
+                  </svg>
+                  <p>↑ {weather.sunrise.slice(11, 16)} · ↓ {weather.sunset.slice(11, 16)}</p>
+                </section>
+              );
+            })()}
+            {rainSummary(weather.hours) && <p className="card">{rainSummary(weather.hours)}</p>}
+            <section className="card wide" aria-label="Hourly forecast">
+              <h2>Hourly forecast</h2>
+              <ul className="hourly" aria-label="Hourly forecast">
+                {weather.hours.map((h) => (
+                  <li key={h.time}><span>{h.time.slice(11, 16)}</span><strong>{temp(h.temp)}°</strong></li>
+                ))}
+              </ul>
+            </section>
+          <table className="card wide">
             <caption>Daily forecast</caption>
             <thead><tr><th scope="col">Day</th><th scope="col">Conditions</th><th scope="col">Rain</th><th scope="col">Min</th><th scope="col">Range</th><th scope="col">Max</th></tr></thead>
             <tbody>
@@ -158,6 +200,7 @@ export default function App() {
               ))}
             </tbody>
           </table>
+          </div>
         </>
       )}
       <p className="muted card">Data: <a href="https://open-meteo.com/">Open-Meteo</a></p>

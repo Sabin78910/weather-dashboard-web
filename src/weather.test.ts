@@ -169,3 +169,42 @@ test("getWeather reads is_day, defaulting to day", async () => {
   expect((await getWeather(p, (() => ok(body({ is_day: 0 }))) as unknown as typeof fetch)).isDay).toBe(false);
   expect((await getWeather(p, (() => ok(body({}))) as unknown as typeof fetch)).isDay).toBe(true);
 });
+
+import { sunProgress, arcPoint, gaugeFraction, compassPoint } from "./weather";
+
+test("sunProgress maps time to daylight fraction and clamps", () => {
+  const [r, s] = ["2026-10-08T06:00", "2026-10-08T18:00"];
+  expect(sunProgress("2026-10-08T05:00", r, s)).toBe(0);
+  expect(sunProgress("2026-10-08T09:00", r, s)).toBe(0.25);
+  expect(sunProgress("2026-10-08T12:00", r, s)).toBe(0.5);
+  expect(sunProgress("2026-10-08T23:00", r, s)).toBe(1);
+  expect(sunProgress("2026-10-08T12:00", s, r)).toBe(0);
+});
+
+test("arcPoint places the sun on the semicircle", () => {
+  const left = arcPoint(0, 50, 50, 40);
+  const mid = arcPoint(0.5, 50, 50, 40);
+  const right = arcPoint(1, 50, 50, 40);
+  expect(left.x).toBeCloseTo(10);
+  expect(left.y).toBeCloseTo(50);
+  expect(mid.x).toBeCloseTo(50);
+  expect(mid.y).toBeCloseTo(10);
+  expect(right.x).toBeCloseTo(90);
+  expect(right.y).toBeCloseTo(50);
+});
+
+test("gaugeFraction maps values to 0–1", () => {
+  expect(gaugeFraction(0, 11)).toBe(0);
+  expect(gaugeFraction(5.5, 11)).toBe(0.5);
+  expect(gaugeFraction(20, 11)).toBe(1);
+  expect(gaugeFraction(-3, 11)).toBe(0);
+  expect(gaugeFraction(3, 0)).toBe(0);
+});
+
+test("compassPoint names wind directions", () => {
+  expect(compassPoint(0)).toBe("N");
+  expect(compassPoint(350)).toBe("N");
+  expect(compassPoint(90)).toBe("E");
+  expect(compassPoint(225)).toBe("SW");
+  expect(compassPoint(-90)).toBe("W");
+});
