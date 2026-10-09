@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import WeatherIcon from "./WeatherIcon";
-import { loadFavourites, saveFavourites, loadLastCity, saveLastCity } from "./storage";
+import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, type ForecastSnapshot } from "./storage";
 
 function Gauge({ label, value, max, color, text }: { label: string; value: number; max: number; color: string; text: string }) {
   const f = gaugeFraction(value, max);
@@ -15,6 +15,11 @@ function Gauge({ label, value, max, color, text }: { label: string; value: numbe
   );
 }
 
+type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
+
+// A failed fetch (rather than an HTTP/API error) means the network is unreachable.
+const isOffline = (err: unknown) => !navigator.onLine || err instanceof TypeError;
+
 export default function App() {
   const [query, setQuery] = useState("Kathmandu");
   const [place, setPlace] = useState<Place | null>(null);
@@ -24,6 +29,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [favourites, setFavourites] = useState<string[]>(loadFavourites);
   const [unit, setUnit] = useState<Unit>("C");
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
+  const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(null);
   const temp = (c: number) => Math.round(convertTemp(c, unit));
 
   async function runSearch(city: string) {
@@ -35,11 +42,22 @@ export default function App() {
       setPlace(p);
       setAir(null);
       void getAirQuality(p).then(setAir);
-      setWeather(await getWeather(p));
+      const w = await getWeather(p);
+      setWeather(w);
+      setCachedAt(null);
       saveLastCity(city);
+      saveForecast({ place: p, weather: w, savedAt: Date.now() });
     } catch (err) {
-      setError((err as Error).message);
-      setWeather(null);
+      const cached: ForecastSnapshot | null = loadForecast();
+      if (cached && isOffline(err)) {
+        setPlace(cached.place);
+        setWeather(cached.weather);
+        setCachedAt(cached.savedAt);
+        setError(null);
+      } else {
+        setError((err as Error).message);
+        setWeather(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -80,6 +98,22 @@ export default function App() {
   }
 
   useEffect(() => {
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallEvent(e as InstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
+  }, []);
+
+  async function install() {
+    if (!installEvent) return;
+    await installEvent.prompt();
+    await installEvent.userChoice;
+    setInstallEvent(null);
+  }
+
+  useEffect(() => {
     const city = loadLastCity() ?? "Kathmandu";
     setQuery(city);
     void runSearch(city);
@@ -100,6 +134,7 @@ export default function App() {
         <button type="submit" className="pill-btn" aria-label="Search" disabled={loading}>{loading ? "…" : "Go"}</button>
         <button type="button" className="icon-btn" aria-label="Use my location" title="Use my location" disabled={loading} onClick={useMyLocation}>📍</button>
         <button type="button" className="icon-btn" aria-label={`Switch to °${unit === "C" ? "F" : "C"}`} title={`Switch to °${unit === "C" ? "F" : "C"}`} onClick={() => setUnit(unit === "C" ? "F" : "C")}>°{unit === "C" ? "F" : "C"}</button>
+        {installEvent && <button type="button" className="pill-btn" onClick={() => void install()}>Install app</button>}
       </form>
       {favourites.length > 0 && (
         <ul className="row" aria-label="Favourite cities" style={{ listStyle: "none", padding: 0 }}>
@@ -126,6 +161,7 @@ export default function App() {
           <div className="card skeleton" />
         </div>
       )}
+      {cachedAt !== null && <p className="muted" role="status">Offline · last updated {new Date(cachedAt).toLocaleString()}</p>}
       {place && weather && (
         <>
           <section className="hero" aria-label="Current weather">
