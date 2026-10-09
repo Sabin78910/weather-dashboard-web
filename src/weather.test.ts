@@ -1,4 +1,4 @@
-import { describe as describeCode, findPlace, getWeather, convertTemp, iconFor, rangeBar } from "./weather";
+import { describe as describeCode, findPlace, getWeather, convertTemp, iconFor, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -78,4 +78,48 @@ test("rangeBar positions a day within the week's range", () => {
   expect(rangeBar(days[0], days)).toEqual({ left: 0, width: 50 });
   expect(rangeBar(days[1], days)).toEqual({ left: 25, width: 75 });
   expect(rangeBar({ min: 3, max: 3 }, [{ min: 3, max: 3 }])).toEqual({ left: 0, width: 100 });
+});
+
+test("aqiLevel and uvLevel classify values", () => {
+  expect(aqiLevel(10).label).toBe("Good");
+  expect(aqiLevel(45).label).toBe("Moderate");
+  expect(aqiLevel(75).label).toBe("Poor");
+  expect(aqiLevel(90).label).toBe("Very poor");
+  expect(aqiLevel(120).label).toBe("Extremely poor");
+  expect(uvLevel(2).label).toBe("Low");
+  expect(uvLevel(4).label).toBe("Moderate");
+  expect(uvLevel(7).label).toBe("High");
+  expect(uvLevel(9).label).toBe("Very high");
+  expect(uvLevel(12).label).toBe("Extreme");
+});
+
+test("healthAdvice picks the worse of air quality and UV", () => {
+  expect(healthAdvice(10, 1)).toMatch(/great/i);
+  expect(healthAdvice(10, 8)).toMatch(/sunscreen/i);
+  expect(healthAdvice(110, 1)).toMatch(/outdoor/i);
+  expect(healthAdvice(null, null)).toBe("");
+  expect(healthAdvice(null, 8)).toMatch(/sunscreen/i);
+});
+
+test("getAirQuality parses european AQI and PM2.5", async () => {
+  const f = vi.fn(() => ok({ current: { european_aqi: 42, pm2_5: 11.5 } }));
+  expect(await getAirQuality({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch)).toEqual({ aqi: 42, pm25: 11.5 });
+  expect(String((f.mock.calls[0] as unknown[])[0])).toContain("air-quality-api.open-meteo.com");
+});
+
+test("getAirQuality returns null on failure or missing data", async () => {
+  const p = { name: "K", country: "N", latitude: 1, longitude: 2 };
+  expect(await getAirQuality(p, (() => Promise.resolve({ ok: false, status: 500 } as Response)) as unknown as typeof fetch)).toBeNull();
+  expect(await getAirQuality(p, (() => Promise.reject(new Error("net"))) as unknown as typeof fetch)).toBeNull();
+  expect(await getAirQuality(p, (() => ok({})) as unknown as typeof fetch)).toBeNull();
+});
+
+test("getWeather reads today's UV index", async () => {
+  const f = vi.fn(() => ok({
+    current: { temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 },
+    daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], uv_index_max: [7.4] },
+  }));
+  const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
+  expect(w.uv).toBe(7.4);
+  expect(String((f.mock.calls[0] as unknown[])[0])).toContain("uv_index_max");
 });

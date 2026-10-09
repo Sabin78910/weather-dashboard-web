@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { convertTemp, describe, findPlace, getWeather, iconFor, rangeBar, type Place, type Unit, type Weather } from "./weather";
+import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, iconFor, rangeBar, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { loadLastCity, saveLastCity } from "./storage";
 
 export default function App() {
   const [query, setQuery] = useState("Kathmandu");
   const [place, setPlace] = useState<Place | null>(null);
   const [weather, setWeather] = useState<Weather | null>(null);
+  const [air, setAir] = useState<AirQuality | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [unit, setUnit] = useState<Unit>("C");
@@ -18,6 +19,8 @@ export default function App() {
       const p = await findPlace(city);
       if (!p) throw new Error(`No place found for "${city}"`);
       setPlace(p);
+      setAir(null);
+      void getAirQuality(p).then(setAir);
       setWeather(await getWeather(p));
       saveLastCity(city);
     } catch (err) {
@@ -40,6 +43,8 @@ export default function App() {
         try {
           const p: Place = { name: "My location", country: "", latitude: coords.latitude, longitude: coords.longitude };
           setPlace(p);
+          setAir(null);
+          void getAirQuality(p).then(setAir);
           setWeather(await getWeather(p));
         } catch (err) {
           setError((err as Error).message);
@@ -85,6 +90,20 @@ export default function App() {
             <h2 style={{ marginTop: 0 }}>{place.country ? `${place.name}, ${place.country}` : place.name}</h2>
             <p style={{ fontSize: 40, margin: 0 }}>{temp(weather.temperature)}°{unit}</p>
             <p className="muted">{describe(weather.code)} · wind {weather.wind} km/h</p>
+          </section>
+          <section className="card" aria-label="Air quality and UV">
+            <h2 style={{ marginTop: 0 }}>Air quality &amp; UV</h2>
+            <p>
+              {air ? (
+                <span style={{ color: aqiLevel(air.aqi).color, fontWeight: 600 }}>
+                  AQI {air.aqi} · {aqiLevel(air.aqi).label}{air.pm25 !== null && ` · PM2.5 ${air.pm25} µg/m³`}
+                </span>
+              ) : <span className="muted">Air quality unavailable</span>}
+            </p>
+            {weather.uv !== null && (
+              <p><span style={{ color: uvLevel(weather.uv).color, fontWeight: 600 }}>UV {weather.uv} · {uvLevel(weather.uv).label}</span></p>
+            )}
+            <p className="muted">{healthAdvice(air?.aqi ?? null, weather.uv)}</p>
           </section>
           <table className="card">
             <caption>Hourly forecast</caption>

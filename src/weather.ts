@@ -1,7 +1,8 @@
 export interface Place { name: string; country: string; latitude: number; longitude: number; }
 export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; }
 export interface HourForecast { time: string; temp: number; }
-export interface Weather { temperature: number; wind: number; code: number; days: DayForecast[]; hours: HourForecast[]; }
+export interface Weather { temperature: number; wind: number; code: number; days: DayForecast[]; hours: HourForecast[]; uv: number | null; }
+export interface AirQuality { aqi: number; pm25: number | null; }
 
 const HOURS_AHEAD = 12;
 
@@ -47,7 +48,7 @@ export async function findPlace(query: string, f: Fetch = fetch): Promise<Place 
 export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
-    `&current=temperature_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&hourly=temperature_2m&timezone=auto&forecast_days=7`;
+    `&current=temperature_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,uv_index_max&hourly=temperature_2m&timezone=auto&forecast_days=7`;
   const res = await f(url);
   if (!res.ok) throw new Error(`Forecast failed (${res.status})`);
   const d = await res.json();
@@ -66,8 +67,48 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
       rain: d.daily.precipitation_probability_max?.[i] ?? null,
     })),
     hours,
+    uv: d.daily.uv_index_max?.[0] ?? null,
   };
 }
 
 export type Unit = "C" | "F";
 export const convertTemp = (c: number, unit: Unit): number => (unit === "F" ? (c * 9) / 5 + 32 : c);
+
+export interface Level { label: string; color: string; }
+const pick = (v: number, steps: [number, Level][], last: Level): Level => steps.find(([max]) => v < max)?.[1] ?? last;
+
+/** European AQI bands. */
+export const aqiLevel = (aqi: number): Level =>
+  pick(aqi, [
+    [20, { label: "Good", color: "#2e9e5b" }], [40, { label: "Fair", color: "#8ab82e" }], [60, { label: "Moderate", color: "#d4a017" }],
+    [80, { label: "Poor", color: "#e0742b" }], [100, { label: "Very poor", color: "#d23f3f" }],
+  ], { label: "Extremely poor", color: "#8e2a6b" });
+
+export const uvLevel = (uv: number): Level =>
+  pick(uv, [
+    [3, { label: "Low", color: "#2e9e5b" }], [6, { label: "Moderate", color: "#d4a017" }], [8, { label: "High", color: "#e0742b" }],
+    [11, { label: "Very high", color: "#d23f3f" }],
+  ], { label: "Extreme", color: "#8e2a6b" });
+
+export function healthAdvice(aqi: number | null, uv: number | null): string {
+  const tips: string[] = [];
+  if (aqi !== null && aqi >= 80) tips.push("Air quality is very poor: limit outdoor activity.");
+  else if (aqi !== null && aqi >= 60) tips.push("Air quality is poor: sensitive people should reduce outdoor exertion.");
+  if (uv !== null && uv >= 6) tips.push("Strong UV: wear sunscreen and a hat, and seek shade at midday.");
+  else if (uv !== null && uv >= 3) tips.push("Moderate UV: sunscreen is advisable.");
+  if (tips.length) return tips.join(" ");
+  return aqi === null && uv === null ? "" : "Conditions are great for being outdoors.";
+}
+
+/** Current air quality, or null when unavailable (never throws). */
+export async function getAirQuality(p: Place, f: Fetch = fetch): Promise<AirQuality | null> {
+  try {
+    const res = await f(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${p.latitude}&longitude=${p.longitude}&current=european_aqi,pm2_5`);
+    if (!res.ok) return null;
+    const c = (await res.json()).current;
+    if (typeof c?.european_aqi !== "number") return null;
+    return { aqi: c.european_aqi, pm25: typeof c.pm2_5 === "number" ? c.pm2_5 : null };
+  } catch {
+    return null;
+  }
+}

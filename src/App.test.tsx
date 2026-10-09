@@ -148,3 +148,34 @@ test("live region says loading while a request is pending", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Search" }));
   expect(screen.getByRole("status")).toHaveTextContent("Loading weather…");
 });
+
+const withAir = (air: () => Promise<Response>) =>
+  vi.fn((url: string) => {
+    if (url.includes("air-quality")) return air();
+    if (url.includes("geocoding")) return json({ results: [{ name: "Pokhara", country: "Nepal", latitude: 1, longitude: 2 }] });
+    return json({
+      current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 },
+      daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], uv_index_max: [8] },
+    });
+  });
+
+test("shows an air quality and UV card with advice", async () => {
+  vi.stubGlobal("fetch", withAir(() => json({ current: { european_aqi: 42, pm2_5: 11.5 } })));
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Search" }));
+  const card = await screen.findByRole("region", { name: "Air quality and UV" });
+  expect(await within(card).findByText(/AQI 42/)).toBeInTheDocument();
+  expect(within(card).getByText(/PM2\.5 11\.5/)).toBeInTheDocument();
+  expect(within(card).getByText(/UV 8/)).toBeInTheDocument();
+  expect(within(card).getByText(/sunscreen/i)).toBeInTheDocument();
+});
+
+test("still shows weather and UV when the air quality API fails", async () => {
+  vi.stubGlobal("fetch", withAir(() => Promise.resolve({ ok: false, status: 500 } as Response)));
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Search" }));
+  const card = await screen.findByRole("region", { name: "Air quality and UV" });
+  expect(within(card).getByText(/Air quality unavailable/)).toBeInTheDocument();
+  expect(within(card).getByText(/UV 8/)).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
