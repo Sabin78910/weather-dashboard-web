@@ -15,3 +15,22 @@ export function saveLastCity(city: string): void {
     // storage unavailable (private mode, quota); ignore
   }
 }
+
+const FAV_KEY = "favourites";
+
+export function loadFavourites(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(FAV_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveFavourites(cities: string[]): void {
+  try {
+    localStorage.setItem(FAV_KEY, JSON.stringify(cities));
+  } catch {
+    // storage unavailable; ignore
+  }
+}

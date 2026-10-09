@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, rainSummary, iconFor, rangeBar, type AirQuality, type Place, type Unit, type Weather } from "./weather";
-import { loadLastCity, saveLastCity } from "./storage";
+import { loadFavourites, saveFavourites, loadLastCity, saveLastCity } from "./storage";
 
 export default function App() {
   const [query, setQuery] = useState("Kathmandu");
@@ -9,6 +9,7 @@ export default function App() {
   const [air, setAir] = useState<AirQuality | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [favourites, setFavourites] = useState<string[]>(loadFavourites);
   const [unit, setUnit] = useState<Unit>("C");
   const temp = (c: number) => Math.round(convertTemp(c, unit));
 
@@ -60,6 +61,11 @@ export default function App() {
     );
   }
 
+  function updateFavourites(next: string[]) {
+    setFavourites(next);
+    saveFavourites(next);
+  }
+
   useEffect(() => {
     const last = loadLastCity();
     if (last) {
@@ -82,12 +88,25 @@ export default function App() {
         <button type="button" disabled={loading} onClick={useMyLocation}>Use my location</button>
         <button type="button" onClick={() => setUnit(unit === "C" ? "F" : "C")}>Switch to °{unit === "C" ? "F" : "C"}</button>
       </form>
+      {favourites.length > 0 && (
+        <ul className="row" aria-label="Favourite cities" style={{ listStyle: "none", padding: 0 }}>
+          {favourites.map((c) => (
+            <li key={c}>
+              <button type="button" disabled={loading} onClick={() => { setQuery(c); void runSearch(c); }}>{c}</button>
+              <button type="button" aria-label={`Remove ${c} from favourites`} onClick={() => updateFavourites(favourites.filter((f) => f !== c))}>✕</button>
+            </li>
+          ))}
+        </ul>
+      )}
       <p className="muted" role="status" aria-live="polite">{loading ? "Loading weather…" : ""}</p>
       {error && <p className="error" role="alert">{error}</p>}
       {place && weather && (
         <>
           <section className="card">
             <h2 style={{ marginTop: 0 }}>{place.country ? `${place.name}, ${place.country}` : place.name}</h2>
+            {place.name !== "My location" && !favourites.includes(place.name) && (
+              <button type="button" aria-label={`Save ${place.name} to favourites`} onClick={() => updateFavourites([...favourites, place.name])}>☆ Save</button>
+            )}
             <p style={{ fontSize: 40, margin: 0 }}>{temp(weather.temperature)}°{unit}</p>
             <p className="muted">{describe(weather.code)} · wind {weather.wind} km/h</p>
           </section>
