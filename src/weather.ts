@@ -1,7 +1,7 @@
 export interface Place { name: string; country: string; latitude: number; longitude: number; }
 export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; }
 export interface HourForecast { time: string; temp: number; rain?: number; }
-export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; }
+export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; }
 export interface AirQuality { aqi: number; pm25: number | null; }
 
 const HOURS_AHEAD = 12;
@@ -56,7 +56,7 @@ export async function findPlace(query: string, f: Fetch = fetch): Promise<Place 
 export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
-    `&current=temperature_2m,wind_speed_10m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,uv_index_max&hourly=temperature_2m,precipitation_probability&timezone=auto&forecast_days=7`;
+    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,uv_index_max&hourly=temperature_2m,precipitation_probability&timezone=auto&forecast_days=7`;
   const res = await f(url);
   if (!res.ok) throw new Error(`Forecast failed (${res.status})`);
   const d = await res.json();
@@ -80,6 +80,10 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
     })),
     hours,
     uv: d.daily.uv_index_max?.[0] ?? null,
+    windDir: d.current.wind_direction_10m ?? null,
+    sunrise: d.daily.sunrise?.[0] ?? null,
+    sunset: d.daily.sunset?.[0] ?? null,
+    now: d.current.time ?? null,
   };
 }
 
@@ -137,3 +141,28 @@ export function rainSummary(hours: HourForecast[]): string {
   const label = `${hour % 12 || 12} ${hour < 12 ? "am" : "pm"}`;
   return `Rain likely around ${label} (${first.rain}%)`;
 }
+
+/** Fraction (0–1) of the daylight span elapsed at `now`; clamped, so 0 before sunrise and 1 after sunset. */
+export function sunProgress(now: string, sunrise: string, sunset: string): number {
+  const [n, r, s] = [now, sunrise, sunset].map((t) => new Date(t).getTime());
+  if (!(s > r)) return 0;
+  return Math.min(1, Math.max(0, (n - r) / (s - r)));
+}
+
+/** Point on a semicircular arc (centre cx,cy; radius r) for progress 0 (left) … 1 (right). */
+export function arcPoint(progress: number, cx: number, cy: number, r: number): { x: number; y: number } {
+  const a = Math.PI * (1 - Math.min(1, Math.max(0, progress)));
+  return { x: cx + r * Math.cos(a), y: cy - r * Math.sin(a) };
+}
+
+/** Gauge fill fraction (0–1) of a value within 0…max. */
+export function gaugeFraction(value: number, max: number): number {
+  return max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
+}
+
+export const AQI_GAUGE_MAX = 120;
+export const UV_GAUGE_MAX = 11;
+
+const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+/** Compass point for a wind direction in degrees (direction the wind comes from). */
+export const compassPoint = (deg: number): string => COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
