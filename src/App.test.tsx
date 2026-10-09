@@ -10,7 +10,7 @@ const mockFetch = () =>
       ? json({ results: [{ name: "Pokhara", country: "Nepal", latitude: 1, longitude: 2 }] })
       : json({
           current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 },
-          daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61] },
+          daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], precipitation_probability_max: [80] },
           hourly: {
             time: Array.from({ length: 24 }, (_, i) => `2026-10-08T${String(i).padStart(2, "0")}:00`),
             temperature_2m: Array.from({ length: 24 }, (_, i) => i * 10),
@@ -117,6 +117,18 @@ test("forecast tables have captions and scope=col headers", async () => {
   }
   expect(screen.getByRole("table", { name: "Hourly forecast" })).toBeInTheDocument();
   expect(screen.getByRole("table", { name: "Daily forecast" })).toBeInTheDocument();
+});
+
+test("daily forecast shows icon, rain chance and a range bar, in the chosen unit", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Search" }));
+  const table = await screen.findByRole("table", { name: "Daily forecast" });
+  expect(within(table).getByText("80%")).toBeInTheDocument();
+  expect(within(table).getByRole("img", { name: "Light rain" })).toBeInTheDocument();
+  expect(within(table).getByRole("meter", { name: "14° to 25°C" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Switch to °F" }));
+  expect(within(table).getByRole("meter", { name: "57° to 77°F" })).toBeInTheDocument();
 });
 
 test("loading state is announced via a polite live region", async () => {

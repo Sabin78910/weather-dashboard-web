@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { convertTemp, describe, findPlace, getWeather, type Place, type Unit, type Weather } from "./weather";
+import { convertTemp, describe, findPlace, getWeather, iconFor, rangeBar, type Place, type Unit, type Weather } from "./weather";
 import { loadLastCity, saveLastCity } from "./storage";
 
 export default function App() {
@@ -99,12 +99,21 @@ export default function App() {
           </table>
           <table className="card">
             <caption>Daily forecast</caption>
-            <thead><tr><th scope="col">Day</th><th scope="col">Conditions</th><th scope="col">Min</th><th scope="col">Max</th></tr></thead>
+            <thead><tr><th scope="col">Day</th><th scope="col">Conditions</th><th scope="col">Rain</th><th scope="col">Min</th><th scope="col">Range</th><th scope="col">Max</th></tr></thead>
             <tbody>
               {weather.days.map((d) => (
                 <tr key={d.date}>
                   <td>{new Date(d.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</td>
-                  <td>{describe(d.code)}</td><td>{temp(d.min)}°</td><td>{temp(d.max)}°</td>
+                  <td><span role="img" aria-label={describe(d.code)}>{iconFor(d.code)}</span> {describe(d.code)}</td>
+                  <td>{d.rain === null ? "–" : `${d.rain}%`}</td>
+                  <td>{temp(d.min)}°</td>
+                  <td>
+                    <div className="range" role="meter" aria-label={`${temp(d.min)}° to ${temp(d.max)}°${unit}`}
+                      aria-valuemin={temp(d.min)} aria-valuemax={temp(d.max)} aria-valuenow={temp(d.max)}>
+                      <span style={{ left: `${rangeBar(d, weather.days).left}%`, width: `${rangeBar(d, weather.days).width}%` }} />
+                    </div>
+                  </td>
+                  <td>{temp(d.max)}°</td>
                 </tr>
               ))}
             </tbody>
