@@ -1,4 +1,4 @@
-import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase, severeOutlook, uvWindow, SEVERE_HEAT_C, SEVERE_COLD_C, type DayForecast } from "./weather";
+import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase, severeOutlook, uvWindow, pollenLevel, todaysPollen, SEVERE_HEAT_C, SEVERE_COLD_C, type DayForecast } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -118,7 +118,7 @@ test("healthAdvice picks the worse of air quality and UV", () => {
 
 test("getAirQuality parses european AQI and PM2.5", async () => {
   const f = vi.fn(() => ok({ current: { european_aqi: 42, pm2_5: 11.5 } }));
-  expect(await getAirQuality({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch)).toEqual({ aqi: 42, pm25: 11.5 });
+  expect(await getAirQuality({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch)).toEqual({ aqi: 42, pm25: 11.5, pollen: null });
   expect(String((f.mock.calls[0] as unknown[])[0])).toContain("air-quality-api.open-meteo.com");
 });
 
@@ -453,4 +453,29 @@ test("getWeather requests hourly uv_index and keeps only today's values", async 
   const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
   expect(String((f.mock.calls[0] as unknown[])[0])).toMatch(/hourly=[^&]*uv_index/);
   expect(w.uvHours).toEqual([{ time: "2026-10-08T09:00", uv: 2 }, { time: "2026-10-08T10:00", uv: 4 }]);
+});
+
+test("getAirQuality requests pollen and reads today's peak", async () => {
+  const f = vi.fn(() => ok({ current: { european_aqi: 42, pm2_5: 11.5 }, hourly: { grass_pollen: [1, 30, null], birch_pollen: [0, 0, 0] } }));
+  const a = await getAirQuality({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
+  expect(a?.pollen).toEqual({ level: 2, species: "grass", value: 30 });
+  expect(String((f.mock.calls[0] as unknown[])[0])).toContain("grass_pollen");
+});
+
+test("pollenLevel uses per-species thresholds", () => {
+  expect(pollenLevel("grass", 0)).toBe(0);
+  expect(pollenLevel("grass", 5)).toBe(1);
+  expect(pollenLevel("grass", 20)).toBe(2);
+  expect(pollenLevel("grass", 50)).toBe(3);
+  expect(pollenLevel("birch", 20)).toBe(1);
+  expect(pollenLevel("birch", 200)).toBe(3);
+  expect(pollenLevel("alder", 9)).toBe(0);
+});
+
+test("todaysPollen picks the peak level and dominant species, handling missing data", () => {
+  expect(todaysPollen({ grass_pollen: [1, 25, null], birch_pollen: [120, 2], alder_pollen: [0] })).toEqual({ level: 2, species: "birch", value: 120 });
+  expect(todaysPollen({ grass_pollen: [0, 0], birch_pollen: [0] })).toEqual({ level: 0, species: null, value: 0 });
+  expect(todaysPollen({ grass_pollen: [null, null] })).toBeNull();
+  expect(todaysPollen({})).toBeNull();
+  expect(todaysPollen(undefined)).toBeNull();
 });

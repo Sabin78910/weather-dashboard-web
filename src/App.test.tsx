@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { loadLastCity, saveLastCity } from "./storage";
@@ -573,4 +573,17 @@ test("UV card shows today's sun-protection window, a low message, or nothing wit
   render(<App />);
   const card = await screen.findByRole("region", { name: "UV index" });
   expect(within(card).queryByText(/UV 3\+|stays low/)).not.toBeInTheDocument();
+});
+
+test("pollen card shows the level and dominant type, and is hidden without data", async () => {
+  vi.stubGlobal("fetch", withAir(() => json({ current: { european_aqi: 42 }, hourly: { grass_pollen: [2, 30], birch_pollen: [1, 1] } })));
+  render(<App />);
+  const card = await screen.findByRole("region", { name: "Pollen" });
+  expect(within(card).getByText(/High · Grass/)).toBeInTheDocument();
+  cleanup();
+  vi.stubGlobal("fetch", withAir(() => json({ current: { european_aqi: 42 }, hourly: { grass_pollen: [null] } })));
+  render(<App />);
+  await screen.findByRole("region", { name: "Air quality" });
+  await screen.findByText(/AQI 42/);
+  expect(screen.queryByRole("region", { name: "Pollen" })).not.toBeInTheDocument();
 });

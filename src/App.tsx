@@ -292,6 +292,18 @@ export default function App() {
                 </>
               ) : <p className="muted">{L("airUnavailable")}</p>}
             </section>
+            {air?.pollen && (() => {
+              const { level, species } = air.pollen;
+              const name = ["Low", "Moderate", "High", "Very high"][level] as "Low";
+              return (
+                <section className="card" aria-label={L("pollen")}>
+                  <h2>{L("pollen")}</h2>
+                  <p style={{ fontWeight: 600 }}>
+                    {L("pollenLine", { level: t(lang, `lvl.${name}`), species: species ? t(lang, `pollen.${species}`) : L("pollenNone") })}
+                  </p>
+                </section>
+              );
+            })()}
             <section className="card" aria-label={L("uvIndex")}>
               <h2>{L("uvIndex")}</h2>
               {weather.uv !== null && (
