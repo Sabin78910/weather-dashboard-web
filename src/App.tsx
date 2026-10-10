@@ -352,6 +352,12 @@ export default function App() {
                     <circle cx={pt.x} cy={pt.y} r="5" fill="#ffe27a" />
                   </svg>
                   <p>↑ {n(weather.sunrise.slice(11, 16))} · ↓ {n(weather.sunset.slice(11, 16))}</p>
+                  {weather.daylightMin !== null && (
+                    <p>
+                      {L("daylight", { len: `${n(Math.floor(weather.daylightMin / 60))}h ${n(weather.daylightMin % 60)}m` })}
+                      {weather.daylightDeltaMin !== null && ` · ${weather.daylightDeltaMin === 0 ? L("daylightSame") : L(weather.daylightDeltaMin > 0 ? "daylightLonger" : "daylightShorter", { m: n(Math.abs(weather.daylightDeltaMin)) })}`}
+                    </p>
+                  )}
                   <p>
                     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                       <circle cx="8" cy="8" r="7" fill="#333a" />

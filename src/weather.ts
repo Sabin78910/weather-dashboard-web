@@ -3,7 +3,7 @@ import { EN, num, t, type Key, type Lang } from "./i18n";
 export interface Place { name: string; country: string; latitude: number; longitude: number; }
 export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; precip: number | null; }
 export interface HourForecast { time: string; temp: number; rain?: number; }
-export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; gust: number | null; }
+export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; gust: number | null; daylightMin: number | null; daylightDeltaMin: number | null; }
 export interface AirQuality { aqi: number; pm25: number | null; }
 
 const HOURS_AHEAD = 12;
@@ -93,6 +93,8 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
     now: d.current.time ?? null,
     pressure: d.current.pressure_msl ?? null,
     visibility: d.current.visibility ?? null,
+    daylightMin: dayLength(d.daily.sunrise?.[ti], d.daily.sunset?.[ti]),
+    daylightDeltaMin: ti > 0 ? daylightChange(dayLength(d.daily.sunrise?.[ti], d.daily.sunset?.[ti]), dayLength(d.daily.sunrise?.[ti - 1], d.daily.sunset?.[ti - 1])) : null,
     pressureDelta,
     yesterdayMax: typeof yesterdayMax === "number" ? yesterdayMax : null,
   };
@@ -200,6 +202,18 @@ export function rainSummary(hours: HourForecast[], lang: Lang = "en"): string {
   const hour = Number(first.time.slice(11, 13));
   const label = `${num(lang, hour % 12 || 12)} ${t(lang, hour < 12 ? "am" : "pm")}`;
   return t(lang, "rainAt", { time: label, pct: num(lang, first.rain as number) });
+}
+
+/** Whole minutes between sunrise and sunset; null when either is missing/invalid or sunset is not after sunrise. */
+export function dayLength(sunrise: unknown, sunset: unknown): number | null {
+  if (typeof sunrise !== "string" || typeof sunset !== "string") return null;
+  const [r, s] = [sunrise, sunset].map((t) => new Date(t).getTime());
+  return s > r ? Math.round((s - r) / 60000) : null;
+}
+
+/** Minutes today's daylight differs from yesterday's (positive = longer); null if either is missing. */
+export function daylightChange(today: number | null, yesterday: number | null): number | null {
+  return today === null || yesterday === null ? null : today - yesterday;
 }
 
 /** Fraction (0–1) of the daylight span elapsed at `now`; clamped, so 0 before sunrise and 1 after sunset. */
