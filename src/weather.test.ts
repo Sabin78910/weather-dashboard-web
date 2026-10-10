@@ -1,4 +1,4 @@
-import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips } from "./weather";
+import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -16,10 +16,10 @@ test("findPlace parses geocoding result", async () => {
 test("getWeather builds daily forecast", async () => {
   const f = () => ok({
     current: { temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 },
-    daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], precipitation_probability_max: [80] },
+    daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], precipitation_probability_max: [80], precipitation_sum: [5.2] },
   });
   const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
-  expect(w.days).toEqual([{ date: "2026-10-08", max: 25, min: 14, code: 61, rain: 80 }]);
+  expect(w.days).toEqual([{ date: "2026-10-08", max: 25, min: 14, code: 61, rain: 80, precip: 5.2 }]);
 });
 
 test("getWeather requests hourly temperature and returns the next 12 hours", async () => {
@@ -62,7 +62,17 @@ test("getWeather requests 7 days with rain chance and tolerates missing rain dat
   const url = String((f.mock.calls[0] as unknown[])[0]);
   expect(url).toContain("precipitation_probability_max");
   expect(url).toContain("forecast_days=7");
+  expect(url).toContain("precipitation_sum");
   expect(w.days[0].rain).toBeNull();
+  expect(w.days[0].precip).toBeNull();
+});
+
+test("formatPrecip converts mm to inches and hides zero or missing", () => {
+  expect(formatPrecip(5.24, "C")).toEqual({ value: 5.2, unit: "mm" });
+  expect(formatPrecip(25.4, "F")).toEqual({ value: 1, unit: "in" });
+  expect(formatPrecip(5, "F")).toEqual({ value: 0.2, unit: "in" });
+  expect(formatPrecip(0, "C")).toBeNull();
+  expect(formatPrecip(null, "C")).toBeNull();
 });
 
 test("iconKind maps codes and day/night to icon kinds", () => {
@@ -230,7 +240,7 @@ test("compassPoint names wind directions", () => {
 });
 
 describe("dailyTips", () => {
-  const base: Parameters<typeof dailyTips>[0] = { temperature: 20, code: 1, days: [{ date: "d", max: 24, min: 16, code: 1, rain: 10 }], hours: [{ time: "2026-10-08T10:00", temp: 20 }, { time: "2026-10-08T11:00", temp: 19 }], uv: 2 };
+  const base: Parameters<typeof dailyTips>[0] = { temperature: 20, code: 1, days: [{ date: "d", max: 24, min: 16, code: 1, rain: 10, precip: null }], hours: [{ time: "2026-10-08T10:00", temp: 20 }, { time: "2026-10-08T11:00", temp: 19 }], uv: 2 };
   const ids = (w: Partial<typeof base>, aqi: number | null = 20) => dailyTips({ ...base, ...w }, aqi).map((t) => t.id);
 
   test("umbrella when today's rain chance is 50%+", () => {
@@ -261,7 +271,7 @@ describe("dailyTips", () => {
 });
 
 test("shareSummary builds a text summary in the chosen unit", () => {
-  const w = { temperature: 21, code: 2, days: [{ date: "d", max: 25, min: 14, code: 61, rain: 80 }] };
+  const w = { temperature: 21, code: 2, days: [{ date: "d", max: 25, min: 14, code: 61, rain: 80, precip: null }] };
   const p = { name: "Pokhara", country: "Nepal", latitude: 1, longitude: 2 };
   expect(shareSummary(p, w, "C")).toBe("Today in Pokhara, Nepal: Partly cloudy, 21°C. H:25° L:14°");
   expect(shareSummary(p, w, "F")).toBe("Today in Pokhara, Nepal: Partly cloudy, 70°F. H:77° L:57°");

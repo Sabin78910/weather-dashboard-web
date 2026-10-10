@@ -1,7 +1,7 @@
 import { EN, num, t, type Key, type Lang } from "./i18n";
 
 export interface Place { name: string; country: string; latitude: number; longitude: number; }
-export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; }
+export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; precip: number | null; }
 export interface HourForecast { time: string; temp: number; rain?: number; }
 export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; }
 export interface AirQuality { aqi: number; pm25: number | null; }
@@ -52,7 +52,7 @@ export async function findPlace(query: string, f: Fetch = fetch): Promise<Place 
 export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
-    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,uv_index_max&hourly=temperature_2m,precipitation_probability&timezone=auto&forecast_days=7`;
+    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability&timezone=auto&forecast_days=7`;
   const res = await f(url);
   if (!res.ok) throw new Error(`Forecast failed (${res.status})`);
   const d = await res.json();
@@ -73,6 +73,7 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
     days: d.daily.time.map((date: string, i: number) => ({
       date, max: d.daily.temperature_2m_max[i], min: d.daily.temperature_2m_min[i], code: d.daily.weather_code[i],
       rain: d.daily.precipitation_probability_max?.[i] ?? null,
+      precip: d.daily.precipitation_sum?.[i] ?? null,
     })),
     hours,
     uv: d.daily.uv_index_max?.[0] ?? null,
@@ -87,6 +88,14 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
 
 export type Unit = "C" | "F";
 export const convertTemp = (c: number, unit: Unit): number => (unit === "F" ? (c * 9) / 5 + 32 : c);
+
+const MM_PER_INCH = 25.4;
+/** Precipitation total in the unit's system (mm for °C, in for °F), rounded to 1 decimal (2 for inches < 1); null when zero or missing. */
+export function formatPrecip(mm: number | null, unit: Unit): { value: number; unit: "mm" | "in" } | null {
+  if (mm === null || !(mm > 0)) return null;
+  const r = (v: number) => Math.round(v * 10) / 10;
+  return unit === "F" ? { value: r(mm / MM_PER_INCH), unit: "in" } : { value: r(mm), unit: "mm" };
+}
 
 export interface Level { label: string; color: string; }
 const lvl = (label: string, color: string, lang: Lang): Level => ({ label: t(lang, `lvl.${label}` as Key), color });

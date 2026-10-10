@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { convertTemp, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { convertTemp, formatPrecip, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { LANGS, detectLang, formatDateTime, formatWeekday, num, t, type Key, type Lang } from "./i18n";
 import WeatherIcon from "./WeatherIcon";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, type ForecastSnapshot } from "./storage";
@@ -325,7 +325,15 @@ export default function App() {
                 <tr key={d.date}>
                   <td>{formatWeekday(lang, d.date)}</td>
                   <td><WeatherIcon code={d.code} /> {describe(d.code, lang)}</td>
-                  <td>{d.rain === null ? "–" : `${n(d.rain)}%`}</td>
+                  <td>
+                    {d.rain === null ? "–" : `${n(d.rain)}%`}
+                    {(() => {
+                      const p = formatPrecip(d.precip, unit);
+                      if (!p) return null;
+                      const amount = n(p.value), u = L(p.unit === "mm" ? "mm" : "inch");
+                      return <> <span className="muted" aria-label={L("precipAria", { amount, unit: u })}>{amount} {u}</span></>;
+                    })()}
+                  </td>
                   <td>{temp(d.min)}°</td>
                   <td>
                     <div className="range" role="meter" aria-label={L("rangeAria", { min: temp(d.min), max: temp(d.max), unit })}
