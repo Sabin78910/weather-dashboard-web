@@ -3,10 +3,11 @@ import { EN, num, t, type Key, type Lang } from "./i18n";
 export interface Place { name: string; country: string; latitude: number; longitude: number; }
 export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; precip: number | null; }
 export interface HourForecast { time: string; temp: number; rain?: number; }
-export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; }
+export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; }
 export interface AirQuality { aqi: number; pm25: number | null; }
 
 const HOURS_AHEAD = 12;
+const PRESSURE_TREND_HOURS = 3;
 
 export const describe = (code: number, lang: Lang = "en"): string => (`wx${code}` in EN ? t(lang, `wx${code}` as Key) : t(lang, "unknown"));
 
@@ -52,7 +53,7 @@ export async function findPlace(query: string, f: Fetch = fetch): Promise<Place 
 export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
-    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability&timezone=auto&forecast_days=7&past_days=1`;
+    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m,pressure_msl,visibility&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability,pressure_msl&timezone=auto&forecast_days=7&past_days=1`;
   const res = await f(url);
   if (!res.ok) throw new Error(`Forecast failed (${res.status})`);
   const d = await res.json();
@@ -68,6 +69,9 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const found: number = d.current.time ? d.daily.time.indexOf(String(d.current.time).slice(0, 10)) : -1;
   const ti = Math.max(0, found);
   const yesterdayMax: unknown = ti > 0 ? d.daily.temperature_2m_max[ti - 1] : null;
+  const hp: unknown[] = d.hourly?.pressure_msl ?? [];
+  const [pNow, pBefore] = [d.current.pressure_msl ?? hp[start], hp[start - PRESSURE_TREND_HOURS]];
+  const pressureDelta = times.length && typeof pNow === "number" && typeof pBefore === "number" ? pNow - pBefore : null;
   return {
     temperature: d.current.temperature_2m,
     wind: d.current.wind_speed_10m,
@@ -86,6 +90,9 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
     sunrise: d.daily.sunrise?.[ti] ?? null,
     sunset: d.daily.sunset?.[ti] ?? null,
     now: d.current.time ?? null,
+    pressure: d.current.pressure_msl ?? null,
+    visibility: d.current.visibility ?? null,
+    pressureDelta,
     yesterdayMax: typeof yesterdayMax === "number" ? yesterdayMax : null,
   };
 }
@@ -114,6 +121,26 @@ export function formatPrecip(mm: number | null, unit: Unit): { value: number; un
 /** Wind speed in the unit's system (km/h for °C, mph for °F), rounded to a whole number. */
 export function formatWind(kmh: number, unit: Unit): { value: number; unit: "kmh" | "mph" } {
   return unit === "F" ? { value: Math.round(kmh / KMH_PER_MPH), unit: "mph" } : { value: Math.round(kmh), unit: "kmh" };
+}
+
+const HPA_PER_INHG = 33.8639;
+const M_PER_MILE = 1609.344;
+/** Sea-level pressure in the unit's system (hPa for °C, inHg for °F). */
+export function formatPressure(hpa: number, unit: Unit): { value: number; unit: "hPa" | "inHg" } {
+  return unit === "F" ? { value: Math.round((hpa / HPA_PER_INHG) * 100) / 100, unit: "inHg" } : { value: Math.round(hpa), unit: "hPa" };
+}
+
+/** Visibility from metres in the unit's system (km for °C, mi for °F), rounded to 1 decimal. */
+export function formatVisibility(m: number, unit: Unit): { value: number; unit: "km" | "mi" } {
+  const r = (v: number) => Math.round(v * 10) / 10;
+  return unit === "F" ? { value: r(m / M_PER_MILE), unit: "mi" } : { value: r(m / 1000), unit: "km" };
+}
+
+export type PressureTrend = "rising" | "falling" | "steady";
+/** Trend from the 3-hour pressure change in hPa: steady when under 1 hPa; null when unknown. */
+export function pressureTrend(delta: number | null): PressureTrend | null {
+  if (delta === null) return null;
+  return Math.abs(delta) < 1 ? "steady" : delta > 0 ? "rising" : "falling";
 }
 
 export interface Level { label: string; color: string; }

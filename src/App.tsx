@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { compareWithYesterday, convertTemp, formatPrecip, formatWind, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { compareWithYesterday, convertTemp, formatPrecip, formatWind, formatPressure, formatVisibility, pressureTrend, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { LANGS, detectLang, formatDateTime, formatWeekday, num, t, type Key, type Lang } from "./i18n";
 import WeatherIcon from "./WeatherIcon";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, type ForecastSnapshot } from "./storage";
@@ -299,6 +299,25 @@ export default function App() {
               )}
               <p>{n(formatWind(weather.wind, unit).value)} {L(formatWind(weather.wind, unit).unit)}{weather.windDir !== null && ` · ${compassPoint(weather.windDir, lang)}`}</p>
             </section>
+            {(weather.pressure !== null || weather.visibility !== null) && (
+              <section className="card" aria-label={L("pressureCard")}>
+                <h2>{L("pressure")}</h2>
+                {weather.pressure !== null && (() => {
+                  const p = formatPressure(weather.pressure, unit);
+                  const trend = pressureTrend(weather.pressureDelta);
+                  return (
+                    <p>
+                      <span>{n(p.value)} {L(p.unit)}</span>
+                      {trend && <> <span aria-hidden="true">{trend === "rising" ? "↑" : trend === "falling" ? "↓" : "→"}</span> <span aria-label={L("trendAria", { trend: L(trend) })}>{L(trend)}</span></>}
+                    </p>
+                  );
+                })()}
+                {weather.visibility !== null && (() => {
+                  const v = formatVisibility(weather.visibility, unit);
+                  return <p>{L("visibility")}: <span>{n(v.value)} {L(v.unit)}</span></p>;
+                })()}
+              </section>
+            )}
             {weather.sunrise && weather.sunset && weather.now && (() => {
               const pt = arcPoint(sunProgress(weather.now, weather.sunrise, weather.sunset), 50, 50, 40);
               return (
