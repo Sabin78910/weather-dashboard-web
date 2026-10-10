@@ -203,6 +203,18 @@ export function sunProgress(now: string, sunrise: string, sunset: string): numbe
   return Math.min(1, Math.max(0, (n - r) / (s - r)));
 }
 
+const SYNODIC = 29.530588853;
+const NEW_MOON_REF = Date.UTC(2000, 0, 6, 18, 14);
+export type MoonPhaseName = "new" | "waxingCrescent" | "firstQuarter" | "waxingGibbous" | "full" | "waningGibbous" | "lastQuarter" | "waningCrescent";
+const MOON_NAMES: MoonPhaseName[] = ["new", "waxingCrescent", "firstQuarter", "waxingGibbous", "full", "waningGibbous", "lastQuarter", "waningCrescent"];
+
+/** Moon phase for a date: cycle fraction (0 = new, 0.5 = full), illumination (0–1) and one of 8 named phases. */
+export function moonPhase(date: Date): { phase: number; illumination: number; name: MoonPhaseName } {
+  const days = (date.getTime() - NEW_MOON_REF) / 86400000;
+  const phase = (((days / SYNODIC) % 1) + 1) % 1;
+  return { phase, illumination: (1 - Math.cos(2 * Math.PI * phase)) / 2, name: MOON_NAMES[Math.floor(phase * 8 + 0.5) % 8] };
+}
+
 /** Point on a semicircular arc (centre cx,cy; radius r) for progress 0 (left) … 1 (right). */
 export function arcPoint(progress: number, cx: number, cy: number, r: number): { x: number; y: number } {
   const a = Math.PI * (1 - Math.min(1, Math.max(0, progress)));

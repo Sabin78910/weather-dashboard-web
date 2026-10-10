@@ -1,4 +1,4 @@
-import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, formatPressure, formatVisibility, pressureTrend, compareWithYesterday } from "./weather";
+import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -359,4 +359,21 @@ test("getWeather reads pressure, visibility and 3h pressure change, null when mi
   expect(m.pressure).toBeNull();
   expect(m.visibility).toBeNull();
   expect(m.pressureDelta).toBeNull();
+});
+
+test("moonPhase matches known new and full moons and wraps the cycle", () => {
+  const newMoon = moonPhase(new Date("2024-01-11T11:57:00Z"));
+  expect(newMoon.name).toBe("new");
+  expect(newMoon.illumination).toBeLessThan(0.01);
+  const full = moonPhase(new Date("2024-01-25T17:54:00Z"));
+  expect(full.name).toBe("full");
+  expect(full.illumination).toBeGreaterThan(0.99);
+  expect(moonPhase(new Date("2024-01-18T03:53:00Z")).name).toBe("firstQuarter");
+  expect(moonPhase(new Date("2024-02-02T23:18:00Z")).name).toBe("lastQuarter");
+  expect(moonPhase(new Date("2024-01-08T00:00:00Z")).name).toBe("waningCrescent");
+  for (const d of ["1990-05-05T00:00:00Z", "2000-01-06T18:14:00Z", "2030-12-31T00:00:00Z"]) {
+    const { phase } = moonPhase(new Date(d));
+    expect(phase).toBeGreaterThanOrEqual(0);
+    expect(phase).toBeLessThan(1);
+  }
 });
