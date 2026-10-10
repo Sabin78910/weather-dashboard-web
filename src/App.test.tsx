@@ -4,12 +4,12 @@ import App from "./App";
 import { loadLastCity, saveLastCity } from "./storage";
 
 const json = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
-const mockFetch = (daily: object = {}) =>
+const mockFetch = (daily: object = {}, current: object = {}) =>
   vi.fn((url: string) =>
     url.includes("geocoding")
       ? json({ results: [{ name: "Pokhara", country: "Nepal", latitude: 1, longitude: 2 }] })
       : json({
-          current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2, wind_direction_10m: 90, apparent_temperature: 19, relative_humidity_2m: 63, pressure_msl: 1013.25, visibility: 10000 },
+          current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2, wind_direction_10m: 90, apparent_temperature: 19, relative_humidity_2m: 63, pressure_msl: 1013.25, visibility: 10000, wind_gusts_10m: 45, ...current },
           daily: { time: ["2026-10-08"], sunrise: ["2026-10-08T06:00"], sunset: ["2026-10-08T18:00"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], precipitation_probability_max: [80], precipitation_sum: [5.2], ...daily },
           hourly: {
             time: Array.from({ length: 24 }, (_, i) => `2026-10-08T${String(i).padStart(2, "0")}:00`),
@@ -446,10 +446,33 @@ test("wind speed follows the unit toggle in hero line and wind card", async () =
   vi.stubGlobal("fetch", mockFetch());
   render(<App />);
   const wind = await screen.findByRole("region", { name: "Wind" });
-  expect(within(wind).getByText(/5 km\/h/)).toBeInTheDocument();
+  expect(within(wind).getByText(/^5 km\/h/)).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "Switch to °F" }));
   expect(within(screen.getByRole("region", { name: "Wind" })).getByText(/3 mph · E/)).toBeInTheDocument();
   expect(screen.getByText(/wind 3 mph/)).toBeInTheDocument();
+});
+
+test("wind card shows gusts, converts with the unit toggle", async () => {
+  saveLastCity("Pokhara");
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  const wind = await screen.findByRole("region", { name: "Wind" });
+  expect(within(wind).getByText("Gusts 45 km/h")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Switch to °F" }));
+  expect(within(screen.getByRole("region", { name: "Wind" })).getByText("Gusts 28 mph")).toBeInTheDocument();
+});
+
+test("wind card hides gusts when missing or not 5 km/h above sustained wind", async () => {
+  saveLastCity("Pokhara");
+  vi.stubGlobal("fetch", mockFetch({}, { wind_gusts_10m: 9 }));
+  const { unmount } = render(<App />);
+  await within(await screen.findByRole("region", { name: "Wind" })).findByText(/5 km\/h/);
+  expect(screen.queryByText(/Gusts/)).not.toBeInTheDocument();
+  unmount();
+  vi.stubGlobal("fetch", mockFetch({}, { wind_gusts_10m: undefined }));
+  render(<App />);
+  await within(await screen.findByRole("region", { name: "Wind" })).findByText(/5 km\/h/);
+  expect(screen.queryByText(/Gusts/)).not.toBeInTheDocument();
 });
 
 test("daily forecast hides precipitation amount when zero", async () => {

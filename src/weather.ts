@@ -3,7 +3,7 @@ import { EN, num, t, type Key, type Lang } from "./i18n";
 export interface Place { name: string; country: string; latitude: number; longitude: number; }
 export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; precip: number | null; }
 export interface HourForecast { time: string; temp: number; rain?: number; }
-export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; }
+export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; gust: number | null; }
 export interface AirQuality { aqi: number; pm25: number | null; }
 
 const HOURS_AHEAD = 12;
@@ -53,7 +53,7 @@ export async function findPlace(query: string, f: Fetch = fetch): Promise<Place 
 export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
-    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m,pressure_msl,visibility&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability,pressure_msl&timezone=auto&forecast_days=7&past_days=1`;
+    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m,pressure_msl,visibility,wind_gusts_10m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability,pressure_msl&timezone=auto&forecast_days=7&past_days=1`;
   const res = await f(url);
   if (!res.ok) throw new Error(`Forecast failed (${res.status})`);
   const d = await res.json();
@@ -87,6 +87,7 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
     feelsLike: d.current.apparent_temperature ?? null,
     humidity: d.current.relative_humidity_2m ?? null,
     windDir: d.current.wind_direction_10m ?? null,
+    gust: d.current.wind_gusts_10m ?? null,
     sunrise: d.daily.sunrise?.[ti] ?? null,
     sunset: d.daily.sunset?.[ti] ?? null,
     now: d.current.time ?? null,
@@ -116,6 +117,11 @@ export function formatPrecip(mm: number | null, unit: Unit): { value: number; un
   if (mm === null || !(mm > 0)) return null;
   const r = (v: number) => Math.round(v * 10) / 10;
   return unit === "F" ? { value: r(mm / MM_PER_INCH), unit: "in" } : { value: r(mm), unit: "mm" };
+}
+
+/** Gust speed (km/h) worth showing: null when missing or under 5 km/h above sustained wind. */
+export function visibleGust(wind: number, gust: number | null): number | null {
+  return gust !== null && gust - wind >= 5 ? gust : null;
 }
 
 /** Wind speed in the unit's system (km/h for °C, mph for °F), rounded to a whole number. */

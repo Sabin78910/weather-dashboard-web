@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { compareWithYesterday, convertTemp, formatPrecip, formatWind, formatPressure, formatVisibility, pressureTrend, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, moonPhase, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { compareWithYesterday, convertTemp, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, moonPhase, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { LANGS, detectLang, formatDateTime, formatWeekday, num, t, type Key, type Lang } from "./i18n";
 import WeatherIcon from "./WeatherIcon";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, type ForecastSnapshot } from "./storage";
@@ -298,6 +298,12 @@ export default function App() {
                 </svg>
               )}
               <p>{n(formatWind(weather.wind, unit).value)} {L(formatWind(weather.wind, unit).unit)}{weather.windDir !== null && ` · ${compassPoint(weather.windDir, lang)}`}</p>
+              {(() => {
+                const g = visibleGust(weather.wind, weather.gust);
+                if (g === null) return null;
+                const w = formatWind(g, unit);
+                return <p>{L("gusts", { value: n(w.value), unit: L(w.unit) })}</p>;
+              })()}
             </section>
             {(weather.pressure !== null || weather.visibility !== null) && (
               <section className="card" aria-label={L("pressureCard")}>

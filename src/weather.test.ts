@@ -1,4 +1,4 @@
-import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase } from "./weather";
+import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -275,6 +275,23 @@ test("shareSummary builds a text summary in the chosen unit", () => {
   const p = { name: "Pokhara", country: "Nepal", latitude: 1, longitude: 2 };
   expect(shareSummary(p, w, "C")).toBe("Today in Pokhara, Nepal: Partly cloudy, 21°C. H:25° L:14°");
   expect(shareSummary(p, w, "F")).toBe("Today in Pokhara, Nepal: Partly cloudy, 70°F. H:77° L:57°");
+});
+
+test("getWeather requests wind_gusts_10m and exposes gust (null when missing)", async () => {
+  const daily = { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61] };
+  const f = vi.fn(() => ok({ current: { temperature_2m: 21, wind_speed_10m: 5, weather_code: 2, wind_gusts_10m: 45 }, daily }));
+  const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
+  expect(String((f.mock.calls[0] as unknown[])[0])).toContain("wind_gusts_10m");
+  expect(w.gust).toBe(45);
+  const g = vi.fn(() => ok({ current: { temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 }, daily }));
+  expect((await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, g as unknown as typeof fetch)).gust).toBeNull();
+});
+
+test("visibleGust needs data and at least 5 km/h above sustained wind", () => {
+  expect(visibleGust(10, null)).toBeNull();
+  expect(visibleGust(10, 14.9)).toBeNull();
+  expect(visibleGust(10, 15)).toBe(15);
+  expect(visibleGust(10, 45)).toBe(45);
 });
 
 test("formatWind converts km/h to rounded mph for °F and rounds km/h for °C", () => {
