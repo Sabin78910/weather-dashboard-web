@@ -42,6 +42,6 @@ test("domain text is translated", () => {
   expect(wx(0)).toBe("Clear sky");
   expect(wx(7, "ne")).toBe(NE.unknown);
   expect(rainSummary([{ time: "2026-10-08T15:00", temp: 1, rain: 70 }], "ne")).toBe("३ बेलुका बजेतिर वर्षा हुन सक्छ (७०%)");
-  expect(dailyTips({ temperature: 20, code: 1, days: [{ date: "d", max: 25, min: 15, code: 1, rain: null }], hours: [], uv: 7 }, null, "ne")[0].text).toBe("सनस्क्रिन लगाउनुहोस्: पराबैंगनी सूचकांक ७ छ।");
+  expect(dailyTips({ temperature: 20, code: 1, days: [{ date: "d", max: 25, min: 15, code: 1, rain: null, precip: null }], hours: [], uv: 7 }, null, "ne")[0].text).toBe("सनस्क्रिन लगाउनुहोस्: पराबैंगनी सूचकांक ७ छ।");
   expect(shareSummary({ name: "Pokhara", country: "", latitude: 0, longitude: 0 }, { temperature: 20, code: 0, days: [] }, "C", "ne")).toBe("आज Pokhara: खुला आकाश, २०°C।");
 });

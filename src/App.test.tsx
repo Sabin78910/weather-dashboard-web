@@ -10,7 +10,7 @@ const mockFetch = () =>
       ? json({ results: [{ name: "Pokhara", country: "Nepal", latitude: 1, longitude: 2 }] })
       : json({
           current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2, wind_direction_10m: 90, apparent_temperature: 19, relative_humidity_2m: 63 },
-          daily: { time: ["2026-10-08"], sunrise: ["2026-10-08T06:00"], sunset: ["2026-10-08T18:00"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], precipitation_probability_max: [80] },
+          daily: { time: ["2026-10-08"], sunrise: ["2026-10-08T06:00"], sunset: ["2026-10-08T18:00"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], precipitation_probability_max: [80], precipitation_sum: [5.2] },
           hourly: {
             time: Array.from({ length: 24 }, (_, i) => `2026-10-08T${String(i).padStart(2, "0")}:00`),
             temperature_2m: Array.from({ length: 24 }, (_, i) => i * 10),
@@ -421,4 +421,22 @@ test("defaults to Nepali when the browser language is Nepali", async () => {
   render(<App />);
   expect(await screen.findByRole("textbox", { name: "शहर" })).toBeInTheDocument();
   vi.restoreAllMocks();
+});
+
+test("daily forecast shows expected precipitation with accessible text, per unit", async () => {
+  saveLastCity("Pokhara");
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  expect(await screen.findByLabelText("Expected precipitation 5.2 mm")).toHaveTextContent("5.2 mm");
+  await userEvent.click(screen.getByRole("button", { name: "Switch to °F" }));
+  expect(screen.getByLabelText("Expected precipitation 0.2 in")).toHaveTextContent("0.2 in");
+});
+
+test("daily forecast hides precipitation amount when zero", async () => {
+  saveLastCity("Pokhara");
+  const f = mockFetch();
+  vi.stubGlobal("fetch", (url: string) => url.includes("geocoding") ? f(url) : f(url).then(async (r) => { const b = await r.json(); b.daily.precipitation_sum = [0]; return { ok: true, status: 200, json: () => Promise.resolve(b) } as Response; }));
+  render(<App />);
+  await screen.findByText("Pokhara, Nepal");
+  expect(screen.queryByLabelText(/Expected precipitation/)).not.toBeInTheDocument();
 });
