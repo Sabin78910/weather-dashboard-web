@@ -129,6 +129,21 @@ test("getWeather reads today's UV index", async () => {
   expect(String((f.mock.calls[0] as unknown[])[0])).toContain("uv_index_max");
 });
 
+test("getWeather reads feels-like and humidity, null when missing", async () => {
+  const body = (cur: object) => ({ current: { temperature_2m: 21, wind_speed_10m: 5, weather_code: 2, ...cur }, daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61] } });
+  const p = { name: "K", country: "N", latitude: 1, longitude: 2 };
+  const f = vi.fn(() => ok(body({ apparent_temperature: 19.5, relative_humidity_2m: 63 })));
+  const w = await getWeather(p, f as unknown as typeof fetch);
+  expect(w.feelsLike).toBe(19.5);
+  expect(w.humidity).toBe(63);
+  const url = String((f.mock.calls[0] as unknown[])[0]);
+  expect(url).toContain("apparent_temperature");
+  expect(url).toContain("relative_humidity_2m");
+  const m = await getWeather(p, (() => ok(body({}))) as unknown as typeof fetch);
+  expect(m.feelsLike).toBeNull();
+  expect(m.humidity).toBeNull();
+});
+
 const hr = (h: number, rain?: number) => ({ time: `2026-10-08T${String(h).padStart(2, "0")}:00`, temp: 10, rain });
 
 test("rainSummary reports the first likely rain hour", () => {

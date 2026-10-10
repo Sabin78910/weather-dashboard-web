@@ -9,7 +9,7 @@ const mockFetch = () =>
     url.includes("geocoding")
       ? json({ results: [{ name: "Pokhara", country: "Nepal", latitude: 1, longitude: 2 }] })
       : json({
-          current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2, wind_direction_10m: 90 },
+          current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2, wind_direction_10m: 90, apparent_temperature: 19, relative_humidity_2m: 63 },
           daily: { time: ["2026-10-08"], sunrise: ["2026-10-08T06:00"], sunset: ["2026-10-08T18:00"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], precipitation_probability_max: [80] },
           hourly: {
             time: Array.from({ length: 24 }, (_, i) => `2026-10-08T${String(i).padStart(2, "0")}:00`),
@@ -44,6 +44,16 @@ test("hero shows temperature, condition, high and low", async () => {
   expect(within(hero).getByText("21°C")).toBeInTheDocument();
   expect(within(hero).getByText(/H:25°/)).toBeInTheDocument();
   expect(within(hero).getByText(/L:14°/)).toBeInTheDocument();
+});
+
+test("hero shows feels-like (unit-aware) and humidity", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  const hero = await screen.findByRole("region", { name: "Current weather" });
+  expect(within(hero).getByText("Feels like 19°")).toBeInTheDocument();
+  expect(within(hero).getByText("Humidity 63%")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Switch to °F" }));
+  expect(within(hero).getByText("Feels like 66°")).toBeInTheDocument();
 });
 
 test("saves the city after a successful search", async () => {
