@@ -5,7 +5,7 @@ export interface DayForecast { date: string; max: number; min: number; code: num
 export interface HourForecast { time: string; temp: number; rain?: number; }
 export interface UvHour { time: string; uv: number | null; }
 export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; gust: number | null; daylightMin: number | null; daylightDeltaMin: number | null; uvHours: UvHour[]; }
-export interface AirQuality { aqi: number; pm25: number | null; }
+export interface AirQuality { aqi: number; pm25: number | null; pollen: Pollen | null; }
 
 const HOURS_AHEAD = 12;
 const PRESSURE_TREND_HOURS = 3;
@@ -184,14 +184,44 @@ export function healthAdvice(aqi: number | null, uv: number | null, lang: Lang =
   return aqi === null && uv === null ? "" : t(lang, "adviceGreat");
 }
 
+export const POLLEN_SPECIES = ["grass", "birch", "alder", "ragweed"] as const;
+export type PollenSpecies = (typeof POLLEN_SPECIES)[number];
+export interface Pollen { level: 0 | 1 | 2 | 3; species: PollenSpecies | null; value: number; }
+
+/** Lower bounds (grains/m³) of Moderate, High and Very high per species, after Foreca's pollen scale: grass/ragweed 5/20/50, birch/alder 10/50/200. */
+const POLLEN_STEPS: Record<PollenSpecies, [number, number, number]> = {
+  grass: [5, 20, 50], ragweed: [5, 20, 50], birch: [10, 50, 200], alder: [10, 50, 200],
+};
+/** Level 0 (Low) to 3 (Very high) for a species concentration in grains/m³. */
+export const pollenLevel = (species: PollenSpecies, grains: number): 0 | 1 | 2 | 3 =>
+  POLLEN_STEPS[species].filter((min) => grains >= min).length as 0 | 1 | 2 | 3;
+
+/** Today's peak pollen level and its dominant species from hourly arrays; null when no numeric data. */
+export function todaysPollen(hourly: Record<string, unknown> | undefined): Pollen | null {
+  let best: (Pollen & { species: PollenSpecies }) | null = null;
+  let score = -1;
+  for (const species of POLLEN_SPECIES) {
+    const arr = hourly?.[`${species}_pollen`];
+    if (!Array.isArray(arr)) continue;
+    const nums = arr.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+    if (!nums.length) continue;
+    const value = Math.max(...nums);
+    const s = pollenLevel(species, value) + value / POLLEN_STEPS[species][2] / 10;
+    if (s > score) { score = s; best = { level: pollenLevel(species, value), species, value }; }
+  }
+  if (!best) return null;
+  return best.value > 0 ? best : { level: 0, species: null, value: 0 };
+}
+
 /** Current air quality, or null when unavailable (never throws). */
 export async function getAirQuality(p: Place, f: Fetch = fetch): Promise<AirQuality | null> {
   try {
-    const res = await f(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${p.latitude}&longitude=${p.longitude}&current=european_aqi,pm2_5`);
+    const res = await f(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${p.latitude}&longitude=${p.longitude}&current=european_aqi,pm2_5&hourly=${POLLEN_SPECIES.map((k) => `${k}_pollen`).join(",")}&timezone=auto&forecast_days=1`);
     if (!res.ok) return null;
-    const c = (await res.json()).current;
+    const body = await res.json();
+    const c = body.current;
     if (typeof c?.european_aqi !== "number") return null;
-    return { aqi: c.european_aqi, pm25: typeof c.pm2_5 === "number" ? c.pm2_5 : null };
+    return { aqi: c.european_aqi, pm25: typeof c.pm2_5 === "number" ? c.pm2_5 : null, pollen: todaysPollen(body.hourly) };
   } catch {
     return null;
   }
