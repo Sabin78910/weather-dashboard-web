@@ -522,3 +522,20 @@ test("pressure with trend and visibility follow the unit toggle", async () => {
   expect(within(card).getByText("29.92 inHg")).toBeInTheDocument();
   expect(within(card).getByText("6.2 mi")).toBeInTheDocument();
 });
+
+test("shows a dismissible severe-weather heads-up banner", async () => {
+  vi.stubGlobal("fetch", mockFetch({ time: ["2026-10-08", "2026-10-09"], temperature_2m_max: [25, 26], temperature_2m_min: [14, 15], weather_code: [61, 95], precipitation_probability_max: [80, 80], precipitation_sum: [5, 5], sunrise: ["a", "b"], sunset: ["a", "b"] }));
+  render(<App />);
+  const banner = await screen.findByRole("status", { name: "Severe weather heads-up" });
+  expect(banner).toHaveTextContent(/thunderstorm/i);
+  expect(banner).toHaveTextContent("Forecast-based, check official warnings");
+  await userEvent.click(within(banner).getByRole("button", { name: "Dismiss" }));
+  expect(screen.queryByRole("status", { name: "Severe weather heads-up" })).not.toBeInTheDocument();
+});
+
+test("no severe banner for ordinary weather", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  await screen.findByText("Pokhara, Nepal");
+  expect(screen.queryByRole("status", { name: "Severe weather heads-up" })).not.toBeInTheDocument();
+});

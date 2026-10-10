@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { compareWithYesterday, convertTemp, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, moonPhase, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { compareWithYesterday, convertTemp, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, severeOutlook, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, moonPhase, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { LANGS, detectLang, formatDateTime, formatWeekday, num, t, type Key, type Lang } from "./i18n";
 import WeatherIcon from "./WeatherIcon";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, type ForecastSnapshot } from "./storage";
@@ -50,6 +50,7 @@ export default function App() {
   const [shareNote, setShareNote] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [dismissedSevere, setDismissedSevere] = useState<string[]>([]);
   const runId = useRef(0);
   const L = (key: Key, params?: Record<string, string | number>) => t(lang, key, params);
   const n = (v: number | string) => num(lang, v);
@@ -258,6 +259,19 @@ export default function App() {
               <button type="button" aria-label={L("saveFav", { city: place.name })} onClick={() => updateFavourites([...favourites, place.name])}>{L("save")}</button>
             )}
           </section>
+          {(() => {
+            const sev = severeOutlook(weather.days, unit);
+            const key = sev && `${place.name}|${sev.date}`;
+            if (!sev || !key || dismissedSevere.includes(key)) return null;
+            const msg = { storm: "severeStorm", snow: "severeSnow", heat: "severeHeat", cold: "severeCold" } as const;
+            return (
+              <div className="card wide" role="status" aria-label={L("severeLabel")}>
+                <p>{L(msg[sev.kind], { day: formatWeekday(lang, sev.date), temp: sev.temp === null ? "" : n(sev.temp) })}</p>
+                <p className="muted">{L("severeNote")}</p>
+                <button type="button" onClick={() => setDismissedSevere([...dismissedSevere, key])}>{L("dismiss")}</button>
+              </div>
+            );
+          })()}
           <div className="bento">
             {dailyTips(weather, air?.aqi ?? null, lang).length > 0 && (
               <section className="card wide" aria-label={L("tips")}>

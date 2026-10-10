@@ -265,3 +265,22 @@ export function shareSummary(place: Place, w: Pick<Weather, "temperature" | "cod
   const range = day ? ` ${t(lang, "hl", { max: num(lang, tmp(day.max)), min: num(lang, tmp(day.min)) })}` : "";
   return t(lang, "shareText", { where, cond: describe(w.code, lang), temp: num(lang, tmp(w.temperature)), unit, range });
 }
+
+/** Forecast-derived severe-weather thresholds (°C) and look-ahead window. */
+export const SEVERE_HEAT_C = 40;
+export const SEVERE_COLD_C = -15;
+export const SEVERE_OUTLOOK_DAYS = 7;
+export type SevereKind = "storm" | "snow" | "heat" | "cold";
+export interface SevereOutlook { date: string; kind: SevereKind; temp: number | null; }
+
+/** First severe day in the next 7: thunderstorm (95–99), heavy snow/freezing rain (67, 75, 77, 86), extreme heat/cold. Temp is in the unit's scale. */
+export function severeOutlook(daily: DayForecast[], unit: Unit): SevereOutlook | null {
+  for (const d of daily.slice(0, SEVERE_OUTLOOK_DAYS)) {
+    const at = (kind: SevereKind, c: number | null): SevereOutlook => ({ date: d.date, kind, temp: c === null ? null : Math.round(convertTemp(c, unit)) });
+    if (d.code >= 95 && d.code <= 99) return at("storm", null);
+    if (d.code === 66 || d.code === 67 || d.code === 75 || d.code === 77 || d.code === 86) return at("snow", null);
+    if (d.max >= SEVERE_HEAT_C) return at("heat", d.max);
+    if (d.min <= SEVERE_COLD_C) return at("cold", d.min);
+  }
+  return null;
+}
