@@ -1,4 +1,4 @@
-import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, compareWithYesterday } from "./weather";
+import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, formatPressure, formatVisibility, pressureTrend, compareWithYesterday } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -318,4 +318,45 @@ test("compareWithYesterday classifies and rounds the difference", () => {
   expect(compareWithYesterday(23, 22)).toEqual({ trend: "warmer", diff: 1 });
   expect(compareWithYesterday(21, 22)).toEqual({ trend: "cooler", diff: 1 });
   expect(compareWithYesterday(23.4, 22)).toEqual({ trend: "warmer", diff: 1 });
+});
+
+test("formatPressure gives whole hPa for °C and 2-decimal inHg for °F", () => {
+  expect(formatPressure(1013.4, "C")).toEqual({ value: 1013, unit: "hPa" });
+  expect(formatPressure(1013.25, "F")).toEqual({ value: 29.92, unit: "inHg" });
+});
+
+test("formatVisibility converts metres to km or miles with 1 decimal", () => {
+  expect(formatVisibility(10000, "C")).toEqual({ value: 10, unit: "km" });
+  expect(formatVisibility(8450, "C")).toEqual({ value: 8.5, unit: "km" });
+  expect(formatVisibility(10000, "F")).toEqual({ value: 6.2, unit: "mi" });
+  expect(formatVisibility(0, "C")).toEqual({ value: 0, unit: "km" });
+});
+
+test("pressureTrend: steady under 1 hPa change, rising/falling at the boundary, null when unknown", () => {
+  expect(pressureTrend(null)).toBeNull();
+  expect(pressureTrend(0.9)).toBe("steady");
+  expect(pressureTrend(-0.9)).toBe("steady");
+  expect(pressureTrend(1)).toBe("rising");
+  expect(pressureTrend(-1)).toBe("falling");
+});
+
+test("getWeather reads pressure, visibility and 3h pressure change, null when missing", async () => {
+  const p = { name: "K", country: "N", latitude: 1, longitude: 2 };
+  const body = (cur: object, hourly: object) => ({
+    current: { time: "2026-10-08T05:10", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2, ...cur },
+    daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61] },
+    hourly: { time: Array.from({ length: 6 }, (_, i) => `2026-10-08T0${i}:00`), temperature_2m: [1, 2, 3, 4, 5, 6], ...hourly },
+  });
+  const f = vi.fn(() => ok(body({ pressure_msl: 1015, visibility: 24000 }, { pressure_msl: [1010, 1011, 1012, 1013, 1014, 1015] })));
+  const w = await getWeather(p, f as unknown as typeof fetch);
+  expect(w.pressure).toBe(1015);
+  expect(w.visibility).toBe(24000);
+  expect(w.pressureDelta).toBe(3);
+  const url = String((f.mock.calls[0] as unknown[])[0]);
+  expect(url).toContain("pressure_msl");
+  expect(url).toContain("visibility");
+  const m = await getWeather(p, (() => ok(body({}, {}))) as unknown as typeof fetch);
+  expect(m.pressure).toBeNull();
+  expect(m.visibility).toBeNull();
+  expect(m.pressureDelta).toBeNull();
 });
