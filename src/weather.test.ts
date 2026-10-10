@@ -419,3 +419,18 @@ test("severeOutlook only looks at the next 7 days and converts temperature for Â
   expect(severeOutlook([day("a", { max: 40 })], "F")).toEqual({ date: "a", kind: "heat", temp: 104 });
   expect(severeOutlook([day("a", { min: -20 })], "F")).toEqual({ date: "a", kind: "cold", temp: -4 });
 });
+
+import { dayLength, daylightChange } from "./weather";
+test("dayLength gives whole minutes, null when missing or inverted", () => {
+  expect(dayLength("2026-10-08T06:00", "2026-10-08T17:42")).toBe(702);
+  expect(dayLength(undefined, "2026-10-08T17:42")).toBeNull();
+  expect(dayLength("2026-10-08T06:00", "x")).toBeNull();
+  expect(dayLength("2026-10-08T18:00", "2026-10-08T06:00")).toBeNull();
+});
+test("daylightChange is longer, shorter, equal or null", () => {
+  expect(daylightChange(702, 700)).toBe(2);
+  expect(daylightChange(698, 700)).toBe(-2);
+  expect(daylightChange(700, 700)).toBe(0);
+  expect(daylightChange(null, 700)).toBeNull();
+  expect(daylightChange(700, null)).toBeNull();
+});

@@ -539,3 +539,19 @@ test("no severe banner for ordinary weather", async () => {
   await screen.findByText("Pokhara, Nepal");
   expect(screen.queryByRole("status", { name: "Severe weather heads-up" })).not.toBeInTheDocument();
 });
+
+test("sun card shows daylight length and change vs yesterday, hidden delta when unknown", async () => {
+  const d = (rise: string, set: string) => ({ ...past(20), sunrise: ["2026-10-07T06:02", rise], sunset: ["2026-10-07T17:58", set] });
+  for (const [set, text] of [["2026-10-08T17:54", "Daylight 11h 54m · 2m shorter than yesterday"], ["2026-10-08T17:58", "Daylight 11h 58m · 2m longer than yesterday"], ["2026-10-08T17:56", "Daylight 11h 56m · Same as yesterday"]] as const) {
+    const rise = "2026-10-08T06:00";
+    vi.stubGlobal("fetch", mockFetch(d(rise, set)));
+    const { unmount } = render(<App />);
+    const sun = await screen.findByRole("region", { name: "Sunrise and sunset" });
+    expect(within(sun).getByText(text)).toBeInTheDocument();
+    unmount();
+  }
+  vi.stubGlobal("fetch", mockFetch(past(20)));
+  render(<App />);
+  const sun = await screen.findByRole("region", { name: "Sunrise and sunset" });
+  expect(within(sun).getByText("Daylight 12h 0m")).toBeInTheDocument();
+});
