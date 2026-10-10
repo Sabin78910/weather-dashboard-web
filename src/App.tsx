@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { compareWithYesterday, convertTemp, formatPrecip, formatWind, formatPressure, formatVisibility, pressureTrend, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { compareWithYesterday, convertTemp, formatPrecip, formatWind, formatPressure, formatVisibility, pressureTrend, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, moonPhase, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { LANGS, detectLang, formatDateTime, formatWeekday, num, t, type Key, type Lang } from "./i18n";
 import WeatherIcon from "./WeatherIcon";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, type ForecastSnapshot } from "./storage";
@@ -320,6 +320,9 @@ export default function App() {
             )}
             {weather.sunrise && weather.sunset && weather.now && (() => {
               const pt = arcPoint(sunProgress(weather.now, weather.sunrise, weather.sunset), 50, 50, 40);
+              const moon = moonPhase(new Date(`${weather.now.slice(0, 10)}T12:00:00Z`));
+              const waxing = moon.phase < 0.5;
+              const rx = (7 * Math.abs(Math.cos(2 * Math.PI * moon.phase))).toFixed(2);
               return (
                 <section className="card" aria-label={L("sunAria")}>
                   <h2>{L("sun")}</h2>
@@ -329,6 +332,13 @@ export default function App() {
                     <circle cx={pt.x} cy={pt.y} r="5" fill="#ffe27a" />
                   </svg>
                   <p>↑ {n(weather.sunrise.slice(11, 16))} · ↓ {n(weather.sunset.slice(11, 16))}</p>
+                  <p>
+                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                      <circle cx="8" cy="8" r="7" fill="#333a" />
+                      <path d={`M8 1 A7 7 0 0 ${waxing ? 1 : 0} 8 15 A${rx} 7 0 0 ${waxing === moon.illumination < 0.5 ? 0 : 1} 8 1`} fill="#f4f1de" />
+                    </svg>{" "}
+                    {L(`moon_${moon.name}` as Key)} · {L("moonIllum", { pct: n(Math.round(moon.illumination * 100)) })}
+                  </p>
                 </section>
               );
             })()}

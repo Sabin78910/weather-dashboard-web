@@ -151,6 +151,14 @@ test("shows wind compass, sunrise/sunset and gauge cards", async () => {
   expect(within(sun).getByText(/18:00/)).toBeInTheDocument();
 });
 
+test("sun card shows the moon phase for the forecast's local date", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Search" }));
+  const sun = await screen.findByRole("region", { name: "Sunrise and sunset" });
+  expect(within(sun).getByText(/Waning crescent · \d+% illuminated/)).toBeInTheDocument();
+});
+
 test("daily forecast shows icon, rain chance and a range bar, in the chosen unit", async () => {
   vi.stubGlobal("fetch", mockFetch());
   render(<App />);
