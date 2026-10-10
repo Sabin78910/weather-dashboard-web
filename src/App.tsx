@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { convertTemp, formatPrecip, formatWind, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { compareWithYesterday, convertTemp, formatPrecip, formatWind, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { LANGS, detectLang, formatDateTime, formatWeekday, num, t, type Key, type Lang } from "./i18n";
 import WeatherIcon from "./WeatherIcon";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, type ForecastSnapshot } from "./storage";
@@ -243,6 +243,11 @@ export default function App() {
             <h2>{place.name === MY_LOCATION ? L("myLocation") : place.country ? `${place.name}, ${place.country}` : place.name}</h2>
             <WeatherIcon code={weather.code} isDay={weather.isDay} size={72} />
             <p className="hero-temp">{temp(weather.temperature)}°{unit}</p>
+            {weather.days[0] && weather.yesterdayMax !== null && (() => {
+              const c = compareWithYesterday(weather.days[0].max, weather.yesterdayMax);
+              const diff = unit === "F" ? Math.round((c.diff * 9) / 5) : c.diff;
+              return <p className="hero-range" aria-live="polite">{c.trend === "same" ? L("sameAsYesterday") : L(c.trend === "warmer" ? "warmerThanYesterday" : "coolerThanYesterday", { diff: n(diff) })}</p>;
+            })()}
             <p className="hero-cond">{L("heroCond", { cond: describe(weather.code, lang), wind: n(formatWind(weather.wind, unit).value), unit: L(formatWind(weather.wind, unit).unit) })}</p>
             {weather.feelsLike !== null && <p className="hero-range">{L("feelsLike", { temp: temp(weather.feelsLike) })}</p>}
             {weather.humidity !== null && <p className="hero-range">{L("humidity", { pct: n(Math.round(weather.humidity)) })}</p>}

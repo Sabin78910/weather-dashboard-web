@@ -4,13 +4,13 @@ import App from "./App";
 import { loadLastCity, saveLastCity } from "./storage";
 
 const json = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
-const mockFetch = () =>
+const mockFetch = (daily: object = {}) =>
   vi.fn((url: string) =>
     url.includes("geocoding")
       ? json({ results: [{ name: "Pokhara", country: "Nepal", latitude: 1, longitude: 2 }] })
       : json({
           current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2, wind_direction_10m: 90, apparent_temperature: 19, relative_humidity_2m: 63 },
-          daily: { time: ["2026-10-08"], sunrise: ["2026-10-08T06:00"], sunset: ["2026-10-08T18:00"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], precipitation_probability_max: [80], precipitation_sum: [5.2] },
+          daily: { time: ["2026-10-08"], sunrise: ["2026-10-08T06:00"], sunset: ["2026-10-08T18:00"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61], precipitation_probability_max: [80], precipitation_sum: [5.2], ...daily },
           hourly: {
             time: Array.from({ length: 24 }, (_, i) => `2026-10-08T${String(i).padStart(2, "0")}:00`),
             temperature_2m: Array.from({ length: 24 }, (_, i) => i * 10),
@@ -450,4 +450,31 @@ test("daily forecast hides precipitation amount when zero", async () => {
   render(<App />);
   await screen.findByText("Pokhara, Nepal");
   expect(screen.queryByLabelText(/Expected precipitation/)).not.toBeInTheDocument();
+});
+
+const past = (yesterday: number) => ({ time: ["2026-10-07", "2026-10-08"], sunrise: ["x", "2026-10-08T06:00"], sunset: ["x", "2026-10-08T18:00"], temperature_2m_max: [yesterday, 25], temperature_2m_min: [10, 14], weather_code: [1, 61], precipitation_probability_max: [0, 80], precipitation_sum: [0, 5.2] });
+
+test("hero compares today with yesterday: warmer, cooler, same", async () => {
+  for (const [y, text] of [[22, "3° warmer than yesterday"], [28, "3° cooler than yesterday"], [24.8, "About the same as yesterday"]] as const) {
+    vi.stubGlobal("fetch", mockFetch(past(y)));
+    const { unmount } = render(<App />);
+    const hero = await screen.findByRole("region", { name: "Current weather" });
+    expect(within(hero).getByText(text)).toHaveAttribute("aria-live", "polite");
+    unmount();
+  }
+});
+
+test("yesterday comparison converts the delta for °F without adding 32", async () => {
+  vi.stubGlobal("fetch", mockFetch(past(20)));
+  render(<App />);
+  await screen.findByText("5° warmer than yesterday");
+  await userEvent.click(screen.getByRole("button", { name: /switch/i }));
+  expect(await screen.findByText("9° warmer than yesterday")).toBeInTheDocument();
+});
+
+test("yesterday comparison is hidden when yesterday's data is missing", async () => {
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  await screen.findByRole("region", { name: "Current weather" });
+  expect(screen.queryByText(/yesterday/i)).not.toBeInTheDocument();
 });

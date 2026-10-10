@@ -1,4 +1,4 @@
-import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind } from "./weather";
+import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, compareWithYesterday } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -283,4 +283,39 @@ test("formatWind converts km/h to rounded mph for °F and rounds km/h for °C", 
   expect(formatWind(10, "F")).toEqual({ value: 6, unit: "mph" });
   expect(formatWind(5, "C")).toEqual({ value: 5, unit: "kmh" });
   expect(formatWind(5.4, "C")).toEqual({ value: 5, unit: "kmh" });
+});
+
+test("getWeather requests past_days=1 and keeps today first with yesterday's max", async () => {
+  const f = vi.fn(() => ok({
+    current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 },
+    daily: {
+      time: ["2026-10-07", "2026-10-08", "2026-10-09"], sunrise: ["a", "b", "c"], sunset: ["d", "e", "f"], uv_index_max: [1, 7, 3],
+      temperature_2m_max: [20, 25, 26], temperature_2m_min: [10, 14, 15], weather_code: [1, 61, 2],
+    },
+  }));
+  const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
+  expect(String((f.mock.calls[0] as unknown[])[0])).toContain("past_days=1");
+  expect(w.days.map((d) => d.date)).toEqual(["2026-10-08", "2026-10-09"]);
+  expect(w.yesterdayMax).toBe(20);
+  expect(w.sunrise).toBe("b");
+  expect(w.sunset).toBe("e");
+  expect(w.uv).toBe(7);
+});
+
+test("getWeather yesterdayMax is null without past data", async () => {
+  const f = () => ok({
+    current: { time: "2026-10-08T10:15", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 },
+    daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61] },
+  });
+  expect((await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch)).yesterdayMax).toBeNull();
+});
+
+test("compareWithYesterday classifies and rounds the difference", () => {
+  expect(compareWithYesterday(25, 22)).toEqual({ trend: "warmer", diff: 3 });
+  expect(compareWithYesterday(20, 22.4)).toEqual({ trend: "cooler", diff: 2 });
+  expect(compareWithYesterday(22.9, 22)).toEqual({ trend: "same", diff: 0 });
+  expect(compareWithYesterday(21.1, 22)).toEqual({ trend: "same", diff: 0 });
+  expect(compareWithYesterday(23, 22)).toEqual({ trend: "warmer", diff: 1 });
+  expect(compareWithYesterday(21, 22)).toEqual({ trend: "cooler", diff: 1 });
+  expect(compareWithYesterday(23.4, 22)).toEqual({ trend: "warmer", diff: 1 });
 });
