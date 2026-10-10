@@ -555,3 +555,22 @@ test("sun card shows daylight length and change vs yesterday, hidden delta when 
   const sun = await screen.findByRole("region", { name: "Sunrise and sunset" });
   expect(within(sun).getByText("Daylight 12h 0m")).toBeInTheDocument();
 });
+
+test("UV card shows today's sun-protection window, a low message, or nothing without data", async () => {
+  const withUv = (uv: (number | null)[] | undefined) => {
+    const base = mockFetch({ uv_index_max: [7] });
+    return vi.fn((url: string) => base(url).then((r) => r.json().then((b: { hourly: object }) => ({ ok: true, status: 200, json: () => Promise.resolve(uv ? { ...b, hourly: { ...b.hourly, uv_index: uv } } : b) } as Response))));
+  };
+  const curve = Array.from({ length: 24 }, (_, i) => (i >= 10 && i <= 16 ? 5 : 1));
+  for (const [uv, text] of [[curve, "UV 3+ from 10:00 to 16:00"], [curve.map(() => 1), "UV stays low today"]] as const) {
+    vi.stubGlobal("fetch", withUv([...uv]));
+    const { unmount } = render(<App />);
+    const card = await screen.findByRole("region", { name: "UV index" });
+    expect(within(card).getByText(text)).toBeInTheDocument();
+    unmount();
+  }
+  vi.stubGlobal("fetch", withUv(undefined));
+  render(<App />);
+  const card = await screen.findByRole("region", { name: "UV index" });
+  expect(within(card).queryByText(/UV 3\+|stays low/)).not.toBeInTheDocument();
+});

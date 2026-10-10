@@ -3,7 +3,8 @@ import { EN, num, t, type Key, type Lang } from "./i18n";
 export interface Place { name: string; country: string; latitude: number; longitude: number; }
 export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; precip: number | null; }
 export interface HourForecast { time: string; temp: number; rain?: number; }
-export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; gust: number | null; daylightMin: number | null; daylightDeltaMin: number | null; }
+export interface UvHour { time: string; uv: number | null; }
+export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; gust: number | null; daylightMin: number | null; daylightDeltaMin: number | null; uvHours: UvHour[]; }
 export interface AirQuality { aqi: number; pm25: number | null; }
 
 const HOURS_AHEAD = 12;
@@ -53,7 +54,7 @@ export async function findPlace(query: string, f: Fetch = fetch): Promise<Place 
 export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
-    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m,pressure_msl,visibility,wind_gusts_10m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability,pressure_msl&timezone=auto&forecast_days=7&past_days=1`;
+    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m,pressure_msl,visibility,wind_gusts_10m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability,pressure_msl,uv_index&timezone=auto&forecast_days=7&past_days=1`;
   const res = await f(url);
   if (!res.ok) throw new Error(`Forecast failed (${res.status})`);
   const d = await res.json();
@@ -72,6 +73,10 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const hp: unknown[] = d.hourly?.pressure_msl ?? [];
   const [pNow, pBefore] = [d.current.pressure_msl ?? hp[start], hp[start - PRESSURE_TREND_HOURS]];
   const pressureDelta = times.length && typeof pNow === "number" && typeof pBefore === "number" ? pNow - pBefore : null;
+  const today = String(d.current.time ?? times[0] ?? "").slice(0, 10);
+  const uvHours: UvHour[] = times
+    .map((time, i) => ({ time, uv: typeof d.hourly.uv_index?.[i] === "number" ? (d.hourly.uv_index[i] as number) : null }))
+    .filter((h) => h.time.startsWith(today) && h.uv !== null);
   return {
     temperature: d.current.temperature_2m,
     wind: d.current.wind_speed_10m,
@@ -95,6 +100,7 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
     visibility: d.current.visibility ?? null,
     daylightMin: dayLength(d.daily.sunrise?.[ti], d.daily.sunset?.[ti]),
     daylightDeltaMin: ti > 0 ? daylightChange(dayLength(d.daily.sunrise?.[ti], d.daily.sunset?.[ti]), dayLength(d.daily.sunrise?.[ti - 1], d.daily.sunset?.[ti - 1])) : null,
+    uvHours,
     pressureDelta,
     yesterdayMax: typeof yesterdayMax === "number" ? yesterdayMax : null,
   };
@@ -297,4 +303,12 @@ export function severeOutlook(daily: DayForecast[], unit: Unit): SevereOutlook |
     if (d.min <= SEVERE_COLD_C) return at("cold", d.min);
   }
   return null;
+}
+
+export const UV_PROTECT = 3;
+
+/** First and last "HH:MM" hour where UV >= 3 (WHO sun-protection threshold); null if none. */
+export function uvWindow(hours: UvHour[]): { start: string; end: string } | null {
+  const hit = hours.filter((h) => h.uv !== null && h.uv >= UV_PROTECT);
+  return hit.length ? { start: hit[0].time.slice(11, 16), end: hit[hit.length - 1].time.slice(11, 16) } : null;
 }

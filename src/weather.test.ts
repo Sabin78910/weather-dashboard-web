@@ -1,4 +1,4 @@
-import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase, severeOutlook, SEVERE_HEAT_C, SEVERE_COLD_C, type DayForecast } from "./weather";
+import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase, severeOutlook, uvWindow, SEVERE_HEAT_C, SEVERE_COLD_C, type DayForecast } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -433,4 +433,24 @@ test("daylightChange is longer, shorter, equal or null", () => {
   expect(daylightChange(700, 700)).toBe(0);
   expect(daylightChange(null, 700)).toBeNull();
   expect(daylightChange(700, null)).toBeNull();
+});
+
+test("uvWindow returns the span where UV >= 3, or null", () => {
+  const h = (uvs: (number | null)[]) => uvs.map((uv, i) => ({ time: `2026-10-08T${String(i + 8).padStart(2, "0")}:00`, uv }));
+  expect(uvWindow([])).toBeNull();
+  expect(uvWindow(h([0, 1, 2.9]))).toBeNull();
+  expect(uvWindow(h([1, 3, 2]))).toEqual({ start: "09:00", end: "09:00" });
+  expect(uvWindow(h([1, 3, 5, 7, 4, 2]))).toEqual({ start: "09:00", end: "12:00" });
+  expect(uvWindow(h([null, 4, null, 3, 1]))).toEqual({ start: "09:00", end: "11:00" });
+});
+
+test("getWeather requests hourly uv_index and keeps only today's values", async () => {
+  const f = vi.fn(() => ok({
+    current: { time: "2026-10-08T10:00", temperature_2m: 21, wind_speed_10m: 5, weather_code: 2 },
+    daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61] },
+    hourly: { time: ["2026-10-08T09:00", "2026-10-08T10:00", "2026-10-09T10:00"], temperature_2m: [1, 2, 3], uv_index: [2, 4, 9] },
+  }));
+  const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
+  expect(String((f.mock.calls[0] as unknown[])[0])).toMatch(/hourly=[^&]*uv_index/);
+  expect(w.uvHours).toEqual([{ time: "2026-10-08T09:00", uv: 2 }, { time: "2026-10-08T10:00", uv: 4 }]);
 });
