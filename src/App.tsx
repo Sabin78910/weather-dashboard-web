@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { convertTemp, formatPrecip, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { convertTemp, formatPrecip, formatWind, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { LANGS, detectLang, formatDateTime, formatWeekday, num, t, type Key, type Lang } from "./i18n";
 import WeatherIcon from "./WeatherIcon";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, type ForecastSnapshot } from "./storage";
@@ -243,7 +243,7 @@ export default function App() {
             <h2>{place.name === MY_LOCATION ? L("myLocation") : place.country ? `${place.name}, ${place.country}` : place.name}</h2>
             <WeatherIcon code={weather.code} isDay={weather.isDay} size={72} />
             <p className="hero-temp">{temp(weather.temperature)}°{unit}</p>
-            <p className="hero-cond">{L("heroCond", { cond: describe(weather.code, lang), wind: n(weather.wind) })}</p>
+            <p className="hero-cond">{L("heroCond", { cond: describe(weather.code, lang), wind: n(formatWind(weather.wind, unit).value), unit: L(formatWind(weather.wind, unit).unit) })}</p>
             {weather.feelsLike !== null && <p className="hero-range">{L("feelsLike", { temp: temp(weather.feelsLike) })}</p>}
             {weather.humidity !== null && <p className="hero-range">{L("humidity", { pct: n(Math.round(weather.humidity)) })}</p>}
             {weather.days[0] && <p className="hero-range">{L("hl", { max: temp(weather.days[0].max), min: temp(weather.days[0].min) })}</p>}
@@ -292,7 +292,7 @@ export default function App() {
                   <polygon points="50,24 58,56 50,50 42,56" fill="currentColor" transform={`rotate(${(weather.windDir + 180) % 360} 50 50)`} />
                 </svg>
               )}
-              <p>{n(weather.wind)} {L("kmh")}{weather.windDir !== null && ` · ${compassPoint(weather.windDir, lang)}`}</p>
+              <p>{n(formatWind(weather.wind, unit).value)} {L(formatWind(weather.wind, unit).unit)}{weather.windDir !== null && ` · ${compassPoint(weather.windDir, lang)}`}</p>
             </section>
             {weather.sunrise && weather.sunset && weather.now && (() => {
               const pt = arcPoint(sunProgress(weather.now, weather.sunrise, weather.sunset), 50, 50, 40);

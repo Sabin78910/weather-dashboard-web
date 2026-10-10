@@ -1,4 +1,4 @@
-import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip } from "./weather";
+import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -275,4 +275,12 @@ test("shareSummary builds a text summary in the chosen unit", () => {
   const p = { name: "Pokhara", country: "Nepal", latitude: 1, longitude: 2 };
   expect(shareSummary(p, w, "C")).toBe("Today in Pokhara, Nepal: Partly cloudy, 21°C. H:25° L:14°");
   expect(shareSummary(p, w, "F")).toBe("Today in Pokhara, Nepal: Partly cloudy, 70°F. H:77° L:57°");
+});
+
+test("formatWind converts km/h to rounded mph for °F and rounds km/h for °C", () => {
+  expect(formatWind(0, "F")).toEqual({ value: 0, unit: "mph" });
+  expect(formatWind(16.09344, "F")).toEqual({ value: 10, unit: "mph" });
+  expect(formatWind(10, "F")).toEqual({ value: 6, unit: "mph" });
+  expect(formatWind(5, "C")).toEqual({ value: 5, unit: "kmh" });
+  expect(formatWind(5.4, "C")).toEqual({ value: 5, unit: "kmh" });
 });
