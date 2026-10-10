@@ -432,6 +432,17 @@ test("daily forecast shows expected precipitation with accessible text, per unit
   expect(screen.getByLabelText("Expected precipitation 0.2 in")).toHaveTextContent("0.2 in");
 });
 
+test("wind speed follows the unit toggle in hero line and wind card", async () => {
+  saveLastCity("Pokhara");
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  const wind = await screen.findByRole("region", { name: "Wind" });
+  expect(within(wind).getByText(/5 km\/h/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Switch to °F" }));
+  expect(within(screen.getByRole("region", { name: "Wind" })).getByText(/3 mph · E/)).toBeInTheDocument();
+  expect(screen.getByText(/wind 3 mph/)).toBeInTheDocument();
+});
+
 test("daily forecast hides precipitation amount when zero", async () => {
   saveLastCity("Pokhara");
   const f = mockFetch();

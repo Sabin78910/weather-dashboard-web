@@ -90,11 +90,17 @@ export type Unit = "C" | "F";
 export const convertTemp = (c: number, unit: Unit): number => (unit === "F" ? (c * 9) / 5 + 32 : c);
 
 const MM_PER_INCH = 25.4;
+const KMH_PER_MPH = 1.609344;
 /** Precipitation total in the unit's system (mm for °C, in for °F), rounded to 1 decimal (2 for inches < 1); null when zero or missing. */
 export function formatPrecip(mm: number | null, unit: Unit): { value: number; unit: "mm" | "in" } | null {
   if (mm === null || !(mm > 0)) return null;
   const r = (v: number) => Math.round(v * 10) / 10;
   return unit === "F" ? { value: r(mm / MM_PER_INCH), unit: "in" } : { value: r(mm), unit: "mm" };
+}
+
+/** Wind speed in the unit's system (km/h for °C, mph for °F), rounded to a whole number. */
+export function formatWind(kmh: number, unit: Unit): { value: number; unit: "kmh" | "mph" } {
+  return unit === "F" ? { value: Math.round(kmh / KMH_PER_MPH), unit: "mph" } : { value: Math.round(kmh), unit: "kmh" };
 }
 
 export interface Level { label: string; color: string; }
