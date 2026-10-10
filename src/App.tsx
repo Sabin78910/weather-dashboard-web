@@ -244,6 +244,8 @@ export default function App() {
             <WeatherIcon code={weather.code} isDay={weather.isDay} size={72} />
             <p className="hero-temp">{temp(weather.temperature)}°{unit}</p>
             <p className="hero-cond">{L("heroCond", { cond: describe(weather.code, lang), wind: n(weather.wind) })}</p>
+            {weather.feelsLike !== null && <p className="hero-range">{L("feelsLike", { temp: temp(weather.feelsLike) })}</p>}
+            {weather.humidity !== null && <p className="hero-range">{L("humidity", { pct: n(Math.round(weather.humidity)) })}</p>}
             {weather.days[0] && <p className="hero-range">{L("hl", { max: temp(weather.days[0].max), min: temp(weather.days[0].min) })}</p>}
             <button type="button" aria-label={L("shareAria")} onClick={() => { setShareNote(null); void share(); }}>{L("share")}</button>
             {shareNote && <p className="muted" role="status">{shareNote}</p>}
