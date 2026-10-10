@@ -3,7 +3,7 @@ import { EN, num, t, type Key, type Lang } from "./i18n";
 export interface Place { name: string; country: string; latitude: number; longitude: number; }
 export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; precip: number | null; }
 export interface HourForecast { time: string; temp: number; rain?: number; }
-export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; }
+export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; }
 export interface AirQuality { aqi: number; pm25: number | null; }
 
 const HOURS_AHEAD = 12;
@@ -52,7 +52,7 @@ export async function findPlace(query: string, f: Fetch = fetch): Promise<Place 
 export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
-    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability&timezone=auto&forecast_days=7`;
+    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability&timezone=auto&forecast_days=7&past_days=1`;
   const res = await f(url);
   if (!res.ok) throw new Error(`Forecast failed (${res.status})`);
   const d = await res.json();
@@ -65,6 +65,9 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
       ...(typeof d.hourly.precipitation_probability?.[i] === "number" && { rain: d.hourly.precipitation_probability[i] as number }),
     }))
     .slice(start, start + HOURS_AHEAD);
+  const found: number = d.current.time ? d.daily.time.indexOf(String(d.current.time).slice(0, 10)) : -1;
+  const ti = Math.max(0, found);
+  const yesterdayMax: unknown = ti > 0 ? d.daily.temperature_2m_max[ti - 1] : null;
   return {
     temperature: d.current.temperature_2m,
     wind: d.current.wind_speed_10m,
@@ -74,16 +77,26 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
       date, max: d.daily.temperature_2m_max[i], min: d.daily.temperature_2m_min[i], code: d.daily.weather_code[i],
       rain: d.daily.precipitation_probability_max?.[i] ?? null,
       precip: d.daily.precipitation_sum?.[i] ?? null,
-    })),
+    })).slice(ti),
     hours,
-    uv: d.daily.uv_index_max?.[0] ?? null,
+    uv: d.daily.uv_index_max?.[ti] ?? null,
     feelsLike: d.current.apparent_temperature ?? null,
     humidity: d.current.relative_humidity_2m ?? null,
     windDir: d.current.wind_direction_10m ?? null,
-    sunrise: d.daily.sunrise?.[0] ?? null,
-    sunset: d.daily.sunset?.[0] ?? null,
+    sunrise: d.daily.sunrise?.[ti] ?? null,
+    sunset: d.daily.sunset?.[ti] ?? null,
     now: d.current.time ?? null,
+    yesterdayMax: typeof yesterdayMax === "number" ? yesterdayMax : null,
   };
+}
+
+export type Trend = "warmer" | "cooler" | "same";
+
+/** Today's max vs yesterday's (in °C): "same" when the difference is under 1°, else the rounded difference. */
+export function compareWithYesterday(todayMax: number, yesterdayMax: number): { trend: Trend; diff: number } {
+  const delta = todayMax - yesterdayMax;
+  if (Math.abs(delta) < 1) return { trend: "same", diff: 0 };
+  return { trend: delta > 0 ? "warmer" : "cooler", diff: Math.round(Math.abs(delta)) };
 }
 
 export type Unit = "C" | "F";
