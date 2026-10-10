@@ -1,4 +1,4 @@
-import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase } from "./weather";
+import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase, severeOutlook, SEVERE_HEAT_C, SEVERE_COLD_C, type DayForecast } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -393,4 +393,29 @@ test("moonPhase matches known new and full moons and wraps the cycle", () => {
     expect(phase).toBeGreaterThanOrEqual(0);
     expect(phase).toBeLessThan(1);
   }
+});
+
+const day = (date: string, o: Partial<DayForecast> = {}): DayForecast => ({ date, max: 20, min: 10, code: 1, rain: null, precip: null, ...o });
+
+test("severeOutlook returns null when nothing is severe", () => {
+  expect(severeOutlook([day("2026-10-08"), day("2026-10-09", { code: 63 })], "C")).toBeNull();
+  expect(severeOutlook([], "C")).toBeNull();
+});
+
+test("severeOutlook detects each severe type and returns the first day", () => {
+  expect(severeOutlook([day("a"), day("b", { code: 96 })], "C")).toEqual({ date: "b", kind: "storm", temp: null });
+  expect(severeOutlook([day("a", { code: 75 })], "C")?.kind).toBe("snow");
+  expect(severeOutlook([day("a", { code: 67 })], "C")?.kind).toBe("snow");
+  expect(severeOutlook([day("a", { code: 86 })], "C")?.kind).toBe("snow");
+  expect(severeOutlook([day("a"), day("b", { max: SEVERE_HEAT_C })], "C")).toEqual({ date: "b", kind: "heat", temp: SEVERE_HEAT_C });
+  expect(severeOutlook([day("a", { min: SEVERE_COLD_C })], "C")).toEqual({ date: "a", kind: "cold", temp: SEVERE_COLD_C });
+  expect(severeOutlook([day("a", { max: SEVERE_HEAT_C - 1, min: SEVERE_COLD_C + 1 })], "C")).toBeNull();
+  expect(severeOutlook([day("a", { code: 95, max: 45 }), day("b", { code: 75 })], "C")?.kind).toBe("storm");
+});
+
+test("severeOutlook only looks at the next 7 days and converts temperature for °F", () => {
+  const days = Array.from({ length: 8 }, (_, i) => day(`d${i}`, i === 7 ? { code: 99 } : {}));
+  expect(severeOutlook(days, "C")).toBeNull();
+  expect(severeOutlook([day("a", { max: 40 })], "F")).toEqual({ date: "a", kind: "heat", temp: 104 });
+  expect(severeOutlook([day("a", { min: -20 })], "F")).toEqual({ date: "a", kind: "cold", temp: -4 });
 });
