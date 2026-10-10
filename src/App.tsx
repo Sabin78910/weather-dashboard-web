@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { compareWithYesterday, convertTemp, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, healthAdvice, dailyTips, rainSummary, severeOutlook, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, moonPhase, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { compareWithYesterday, convertTemp, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, uvWindow, healthAdvice, dailyTips, rainSummary, severeOutlook, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, moonPhase, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { LANGS, detectLang, formatDateTime, formatWeekday, num, t, type Key, type Lang } from "./i18n";
 import WeatherIcon from "./WeatherIcon";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, type ForecastSnapshot } from "./storage";
@@ -300,6 +300,10 @@ export default function App() {
                   <p style={{ color: uvLevel(weather.uv).color, fontWeight: 600 }}>{L("uv")} {n(weather.uv)} · {uvLevel(weather.uv, lang).label}</p>
                 </>
               )}
+              {weather.uvHours.length > 0 && (() => {
+                const win = uvWindow(weather.uvHours);
+                return <p>{win ? L("uvWindow", { start: n(win.start), end: n(win.end) }) : L("uvLow")}</p>;
+              })()}
               <p className="muted">{healthAdvice(air?.aqi ?? null, weather.uv, lang)}</p>
             </section>
             <section className="card" aria-label={L("wind")}>
