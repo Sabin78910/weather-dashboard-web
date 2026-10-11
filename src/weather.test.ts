@@ -118,7 +118,7 @@ test("healthAdvice picks the worse of air quality and UV", () => {
 
 test("getAirQuality parses european AQI and PM2.5", async () => {
   const f = vi.fn(() => ok({ current: { european_aqi: 42, pm2_5: 11.5 } }));
-  expect(await getAirQuality({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch)).toEqual({ aqi: 42, pm25: 11.5, pollen: null });
+  expect(await getAirQuality({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch)).toEqual({ aqi: 42, pm25: 11.5, pollen: null, dominant: { id: "pm2_5", value: 11.5 }, trend: [], species: [] });
   expect(String((f.mock.calls[0] as unknown[])[0])).toContain("air-quality-api.open-meteo.com");
 });
 
@@ -546,4 +546,18 @@ describe("v2 data: 24h timeline, 15-minute nowcast, feels-like reason", () => {
     expect(feelsReason(30, 34)).toBe("humid");
     expect(feelsReason(20, 21)).toBe("similar");
   });
+});
+
+test("getAirQuality reads dominant pollutant, 24h trend and per-species pollen", async () => {
+  const f = vi.fn(() => ok({
+    current: { european_aqi: 42, pm2_5: 11.5, pm10: 15, ozone: 150, nitrogen_dioxide: 10, sulphur_dioxide: 2 },
+    hourly: { european_aqi: [30, 42, null, 50], grass_pollen: [1, 30], birch_pollen: [0] },
+  }));
+  const a = await getAirQuality({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
+  expect(a?.dominant).toEqual({ id: "ozone", value: 150 });
+  expect(a?.trend).toEqual([30, 42, 50]);
+  expect(a?.species).toEqual([{ species: "grass", value: 30, level: 2 }, { species: "birch", value: 0, level: 0 }]);
+  const url = String((f.mock.calls[0] as unknown[])[0]);
+  expect(url).toContain("ozone");
+  expect(url).toContain("hourly=european_aqi");
 });

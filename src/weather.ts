@@ -1,3 +1,5 @@
+import { POLLEN_SPECIES, POLLEN_STEPS, pollenLevel, type Pollen, type PollenSpecies } from "./pollen";
+import { dominantPollutant, parseTrend, pollenBySpecies, POLLUTANTS, type Pollutant, type SpeciesPollen } from "./air";
 import { EN, num, t, type Key, type Lang } from "./i18n";
 
 export interface Place { name: string; country: string; latitude: number; longitude: number; }
@@ -5,7 +7,7 @@ export interface DayForecast { date: string; max: number; min: number; code: num
 export interface HourForecast { time: string; temp: number; rain?: number; }
 export interface UvHour { time: string; uv: number | null; }
 export interface Weather { timeline?: TimelineHour[]; minutely?: Slot[]; temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; gust: number | null; daylightMin: number | null; daylightDeltaMin: number | null; uvHours: UvHour[]; }
-export interface AirQuality { aqi: number; pm25: number | null; pollen: Pollen | null; }
+export interface AirQuality { aqi: number; pm25: number | null; pollen: Pollen | null; dominant: Pollutant | null; trend: number[]; species: SpeciesPollen[]; }
 /** One hour of the 24-hour scrubber timeline; null fields are missing from the API response. */
 export interface TimelineHour { time: string; temp: number; rain: number | null; code: number | null; isDay: boolean | null; wind: number | null; uv: number | null; }
 /** Precipitation (mm) in one 15-minute slot. */
@@ -207,17 +209,7 @@ export function healthAdvice(aqi: number | null, uv: number | null, lang: Lang =
   return aqi === null && uv === null ? "" : t(lang, "adviceGreat");
 }
 
-export const POLLEN_SPECIES = ["grass", "birch", "alder", "ragweed"] as const;
-export type PollenSpecies = (typeof POLLEN_SPECIES)[number];
-export interface Pollen { level: 0 | 1 | 2 | 3; species: PollenSpecies | null; value: number; }
-
-/** Lower bounds (grains/m³) of Moderate, High and Very high per species, after Foreca's pollen scale: grass/ragweed 5/20/50, birch/alder 10/50/200. */
-const POLLEN_STEPS: Record<PollenSpecies, [number, number, number]> = {
-  grass: [5, 20, 50], ragweed: [5, 20, 50], birch: [10, 50, 200], alder: [10, 50, 200],
-};
-/** Level 0 (Low) to 3 (Very high) for a species concentration in grains/m³. */
-export const pollenLevel = (species: PollenSpecies, grains: number): 0 | 1 | 2 | 3 =>
-  POLLEN_STEPS[species].filter((min) => grains >= min).length as 0 | 1 | 2 | 3;
+export { POLLEN_SPECIES, pollenLevel, type PollenSpecies } from "./pollen";
 
 /** Today's peak pollen level and its dominant species from hourly arrays; null when no numeric data. */
 export function todaysPollen(hourly: Record<string, unknown> | undefined): Pollen | null {
@@ -239,12 +231,12 @@ export function todaysPollen(hourly: Record<string, unknown> | undefined): Polle
 /** Current air quality, or null when unavailable (never throws). */
 export async function getAirQuality(p: Place, f: Fetch = fetch): Promise<AirQuality | null> {
   try {
-    const res = await f(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${p.latitude}&longitude=${p.longitude}&current=european_aqi,pm2_5&hourly=${POLLEN_SPECIES.map((k) => `${k}_pollen`).join(",")}&timezone=auto&forecast_days=1`);
+    const res = await f(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${p.latitude}&longitude=${p.longitude}&current=european_aqi,${POLLUTANTS.join(",")}&hourly=european_aqi,${POLLEN_SPECIES.map((k) => `${k}_pollen`).join(",")}&timezone=auto&forecast_days=1`);
     if (!res.ok) return null;
     const body = await res.json();
     const c = body.current;
     if (typeof c?.european_aqi !== "number") return null;
-    return { aqi: c.european_aqi, pm25: typeof c.pm2_5 === "number" ? c.pm2_5 : null, pollen: todaysPollen(body.hourly) };
+    return { aqi: c.european_aqi, pm25: typeof c.pm2_5 === "number" ? c.pm2_5 : null, pollen: todaysPollen(body.hourly), dominant: dominantPollutant(c), trend: parseTrend(body.hourly?.european_aqi), species: pollenBySpecies(body.hourly) };
   } catch {
     return null;
   }
