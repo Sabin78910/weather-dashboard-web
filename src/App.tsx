@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type
 import { compareWithYesterday, convertTemp, formatWind, describe, findPlace, getAirQuality, getWeather, dailyTips, severeOutlook, sceneFor, shareSummary, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { skyFor } from "./sky";
 import { LANGS, detectLang, formatDateTime, freshnessLabel, num, t, type Key, type Lang } from "./i18n";
+import { buildWidgetData, cityFromUrl, pushWidgetData } from "./widget";
 import { loadFavourites, saveFavourites, moveItem, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, loadCityForecast, saveCityForecast, loadUnit, saveUnit, loadTheme, saveTheme, loadSettingsUpdatedAt, saveSettingsUpdatedAt, type ForecastSnapshot, type Theme } from "./storage";
 import { useSettingsSync, type SyncSettings } from "./settingsSync";
 import SkyCanvas from "./components/SkyCanvas";
@@ -46,7 +47,7 @@ function CountUp({ value, n }: { value: number; n: (v: number) => string }) {
 
 export default function App() {
   const [boot] = useState(() => {
-    const city = loadLastCity() ?? "Kathmandu";
+    const city = cityFromUrl(window.location.search) ?? loadLastCity() ?? "Kathmandu";
     return { city, preview: loadCityForecast(city) };
   });
   const [query, setQuery] = useState(boot.city);
@@ -139,6 +140,7 @@ export default function App() {
       const snap = { place: p, weather: w, savedAt: Date.now() };
       saveForecast(snap);
       saveCityForecast([city, p.name], snap);
+      void pushWidgetData(buildWidgetData(p, w, unit, snap.savedAt));
     } catch (err) {
       if (id !== runId.current) return;
       const cached: ForecastSnapshot | null = loadCityForecast(city) ?? loadForecast();
