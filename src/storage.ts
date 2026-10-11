@@ -1,5 +1,5 @@
 import type { Lang } from "./i18n";
-import type { Place, Weather } from "./weather";
+import type { Place, Unit, Weather } from "./weather";
 
 const KEY = "lastCity";
 
@@ -42,13 +42,13 @@ const FORECAST_KEY = "lastForecast";
 
 export type ForecastSnapshot = { place: Place; weather: Weather; savedAt: number };
 
+const isSnapshot = (v: unknown): v is ForecastSnapshot =>
+  !!v && typeof v === "object" && "place" in v && "weather" in v && "savedAt" in v && typeof v.savedAt === "number";
+
 export function loadForecast(): ForecastSnapshot | null {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(FORECAST_KEY) ?? "null");
-    if (parsed && typeof parsed === "object" && "place" in parsed && "weather" in parsed && "savedAt" in parsed && typeof parsed.savedAt === "number") {
-      return parsed as ForecastSnapshot;
-    }
-    return null;
+    return isSnapshot(parsed) ? parsed : null;
   } catch {
     return null;
   }
@@ -76,6 +76,72 @@ export function loadLang(): Lang | null {
 export function saveLang(lang: Lang): void {
   try {
     localStorage.setItem(LANG_KEY, lang);
+  } catch {
+    // storage unavailable; ignore
+  }
+}
+
+const CITY_CACHE_KEY = "forecastCache";
+export const CITY_CACHE_MAX = 8;
+const cacheKey = (city: string) => city.trim().toLowerCase();
+
+function readCityCache(): Record<string, ForecastSnapshot> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(CITY_CACHE_KEY) ?? "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter(([, v]) => isSnapshot(v)));
+  } catch {
+    return {};
+  }
+}
+
+/** Last forecast seen for a city (by search text or place name, case-insensitive), for instant paint. */
+export function loadCityForecast(city: string): ForecastSnapshot | null {
+  return readCityCache()[cacheKey(city)] ?? null;
+}
+
+/** Caches a forecast under each given name, keeping the CITY_CACHE_MAX most recent entries. */
+export function saveCityForecast(names: string[], snapshot: ForecastSnapshot): void {
+  const cache = readCityCache();
+  for (const n of names) if (n.trim()) cache[cacheKey(n)] = snapshot;
+  const kept = Object.entries(cache).sort(([, a], [, b]) => b.savedAt - a.savedAt).slice(0, CITY_CACHE_MAX);
+  try {
+    localStorage.setItem(CITY_CACHE_KEY, JSON.stringify(Object.fromEntries(kept)));
+  } catch {
+    // storage unavailable; ignore
+  }
+}
+
+const UNIT_KEY = "unit";
+export function loadUnit(): Unit | null {
+  try {
+    const v = localStorage.getItem(UNIT_KEY);
+    return v === "C" || v === "F" ? v : null;
+  } catch {
+    return null;
+  }
+}
+export function saveUnit(unit: Unit): void {
+  try {
+    localStorage.setItem(UNIT_KEY, unit);
+  } catch {
+    // storage unavailable; ignore
+  }
+}
+
+export type Theme = "light" | "dark";
+const THEME_KEY = "theme";
+export function loadTheme(): Theme | null {
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    return v === "light" || v === "dark" ? v : null;
+  } catch {
+    return null;
+  }
+}
+export function saveTheme(theme: Theme): void {
+  try {
+    localStorage.setItem(THEME_KEY, theme);
   } catch {
     // storage unavailable; ignore
   }

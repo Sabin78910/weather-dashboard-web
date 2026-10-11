@@ -4,10 +4,16 @@ export interface Place { name: string; country: string; latitude: number; longit
 export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; precip: number | null; }
 export interface HourForecast { time: string; temp: number; rain?: number; }
 export interface UvHour { time: string; uv: number | null; }
-export interface Weather { temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; gust: number | null; daylightMin: number | null; daylightDeltaMin: number | null; uvHours: UvHour[]; }
+export interface Weather { timeline?: TimelineHour[]; minutely?: Slot[]; temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; gust: number | null; daylightMin: number | null; daylightDeltaMin: number | null; uvHours: UvHour[]; }
 export interface AirQuality { aqi: number; pm25: number | null; pollen: Pollen | null; }
+/** One hour of the 24-hour scrubber timeline; null fields are missing from the API response. */
+export interface TimelineHour { time: string; temp: number; rain: number | null; code: number | null; isDay: boolean | null; }
+/** Precipitation (mm) in one 15-minute slot. */
+export interface Slot { time: string; mm: number; }
 
 const HOURS_AHEAD = 12;
+export const TIMELINE_HOURS = 24;
+export const NOWCAST_SLOTS = 8;
 const PRESSURE_TREND_HOURS = 3;
 
 export const describe = (code: number, lang: Lang = "en"): string => (`wx${code}` in EN ? t(lang, `wx${code}` as Key) : t(lang, "unknown"));
@@ -54,7 +60,7 @@ export async function findPlace(query: string, f: Fetch = fetch): Promise<Place 
 export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
-    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m,pressure_msl,visibility,wind_gusts_10m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability,pressure_msl,uv_index&timezone=auto&forecast_days=7&past_days=1`;
+    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m,pressure_msl,visibility,wind_gusts_10m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability,pressure_msl,uv_index,weather_code,is_day&minutely_15=precipitation&forecast_minutely_15=12&timezone=auto&forecast_days=10&past_days=1`;
   const res = await f(url);
   if (!res.ok) throw new Error(`Forecast failed (${res.status})`);
   const d = await res.json();
@@ -77,7 +83,20 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const uvHours: UvHour[] = times
     .map((time, i) => ({ time, uv: typeof d.hourly.uv_index?.[i] === "number" ? (d.hourly.uv_index[i] as number) : null }))
     .filter((h) => h.time.startsWith(today) && h.uv !== null);
+  const timeline: TimelineHour[] = times.slice(start, start + TIMELINE_HOURS).map((time, k) => {
+    const i = start + k;
+    const isDay = d.hourly.is_day?.[i];
+    return { time, temp: d.hourly.temperature_2m[i], rain: finite(d.hourly.precipitation_probability?.[i]), code: finite(d.hourly.weather_code?.[i]), isDay: typeof isDay === "number" ? isDay !== 0 : null };
+  });
+  const slot0 = floor15(String(d.current.time ?? ""));
+  const m = d.minutely_15;
+  const minutely: Slot[] = Array.isArray(m?.time)
+    ? (m.time as string[]).map((time, i) => ({ time, mm: finite(m.precipitation?.[i]) }))
+        .filter((s): s is Slot => s.mm !== null && s.time >= slot0).slice(0, NOWCAST_SLOTS)
+    : [];
   return {
+    timeline,
+    minutely,
     temperature: d.current.temperature_2m,
     wind: d.current.wind_speed_10m,
     code: d.current.weather_code,
@@ -105,6 +124,10 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
     yesterdayMax: typeof yesterdayMax === "number" ? yesterdayMax : null,
   };
 }
+
+const finite = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+/** "YYYY-MM-DDTHH:MM" rounded down to the 15-minute slot it falls in. */
+export const floor15 = (iso: string): string => (iso.length >= 16 ? `${iso.slice(0, 14)}${String(Math.floor(Number(iso.slice(14, 16)) / 15) * 15).padStart(2, "0")}` : iso);
 
 export type Trend = "warmer" | "cooler" | "same";
 
@@ -341,4 +364,34 @@ export const UV_PROTECT = 3;
 export function uvWindow(hours: UvHour[]): { start: string; end: string } | null {
   const hit = hours.filter((h) => h.uv !== null && h.uv >= UV_PROTECT);
   return hit.length ? { start: hit[0].time.slice(11, 16), end: hit[hit.length - 1].time.slice(11, 16) } : null;
+}
+
+/** Minimum precipitation (mm per 15 min) that counts as "raining". */
+export const NOWCAST_MM = 0.1;
+export type NowcastKind = "starts" | "stops" | "continues" | "dry";
+export interface Nowcast { kind: NowcastKind; minutes: number; }
+
+/**
+ * MinuteCast-style summary of the next ~2 hours from 15-minute precipitation slots:
+ * when rain starts or stops (minutes from `now`, rounded to 5, at least 5), or how long it stays dry/wet.
+ * Null with fewer than 2 slots.
+ */
+export function nowcast(slots: Slot[], now: string): Nowcast | null {
+  if (slots.length < 2) return null;
+  const t0 = new Date(now).getTime();
+  const offset = (s: Slot) => Math.max(5, Math.round((new Date(s.time).getTime() - t0) / 300000) * 5);
+  const wet = (s: Slot) => s.mm >= NOWCAST_MM;
+  const span = Math.max(15, Math.round((new Date(slots[slots.length - 1].time).getTime() + 900000 - t0) / 300000) * 5);
+  if (wet(slots[0])) {
+    const dry = slots.find((s) => !wet(s));
+    return dry ? { kind: "stops", minutes: offset(dry) } : { kind: "continues", minutes: span };
+  }
+  const first = slots.find(wet);
+  return first ? { kind: "starts", minutes: offset(first) } : { kind: "dry", minutes: span };
+}
+
+export type FeelsReason = "wind" | "humid" | "similar";
+/** Why the apparent temperature differs: 2°C+ cooler is wind chill, 2°C+ warmer is humidity, otherwise similar. */
+export function feelsReason(temp: number, feels: number): FeelsReason {
+  return feels <= temp - 2 ? "wind" : feels >= temp + 2 ? "humid" : "similar";
 }
