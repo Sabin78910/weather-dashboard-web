@@ -1,22 +1,37 @@
-# Weather Dashboard
-Purpose: Weather web app using the Open-Meteo API (React, TS).
+# Weather
+Living sky weather app: animated conditions, 24h scrubber, rain nowcast, 10 day forecast.
+
+## Stack
+React 19 · TypeScript (strict) · Vite · Vitest · ESLint. Installable PWA with offline support.
+Design: sky gradient driven by condition and time of day, glass bento cards, Inter.
 
 ## Commands
-- Test: `npm test`
-- Lint: `npm run lint && npm run typecheck`
-- Build: `npm run build`
+- Dev: `npm run dev` · Build: `npm run build`
+- Test: `npm test` · Lint: `npm run lint && npm run typecheck`
 
 ## Architecture
-src/ — pure logic in *.ts modules with tests; UI in components (App.tsx)
+- `src/sky.ts` canvas sky model · `src/forecast.ts` Open-Meteo parsing · `src/cities.ts` favourites
+- Sky rendering is separate from data: never fetch inside a draw loop.
 
-## Rules
-- Read only the files you need; do not scan the whole repo.
-- Every behavior change needs a test. Run tests and lint before finishing.
-- No new dependencies, permissions, or signing/secrets changes without asking.
-- Never commit secrets, keystores, .env files.
-- Keep PRs under ~300 changed lines; one issue per PR.
-- Be concise: diffs plus a 3-line summary.
-- If tests still fail after 3 attempts, stop and report the blocker.
+## Data rules
+- Open-Meteo only, no API key. Cache the last city so first paint is never blank.
+- Cross-device sync uses the shared Sabin Labs ID: the sync code in localStorage key `sabin-labs-sync-code`,
+  shared by every app on sabin78910.github.io. Never log it or send it anywhere but sync-api.
 
-## Definition of done
-Lint clean, tests pass, CI green, short summary, PR opened as draft.
+## Testing rules
+- Every behaviour change needs a test. Pure logic in `src/*.ts` is unit-tested; components get the
+  behaviour test, not the markup. Run lint, typecheck and tests before finishing.
+
+## Frontend rules
+- Keep the existing design system, dark-first with a working light theme. Editorial layouts, not dashboard
+  grids. Respect `prefers-reduced-motion`, keep AA contrast and 44px targets.
+- Self-host fonts with @fontsource; a Google Fonts link blocks first paint and costs ~2s on mobile.
+- Keep gzipped JS under ~180KB and Lighthouse mobile performance at 90+.
+
+## Security and git
+- Never commit secrets, keystores, .env files or email addresses.
+- Keep the Content-Security-Policy strict; add a host to connect-src only when a feature needs it.
+- `main` is protected: branch, open a PR, merge when CI is green. One issue per PR, under ~300 lines.
+
+## Done when
+Lint clean, tests pass, CI green, PR opened with a three line summary.
