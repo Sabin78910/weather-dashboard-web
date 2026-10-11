@@ -1,4 +1,4 @@
-import { loadLastCity, saveLastCity, loadFavourites, saveFavourites, loadForecast, saveForecast, moveItem } from "./storage";
+import { loadLastCity, saveLastCity, loadFavourites, saveFavourites, loadForecast, saveForecast, moveItem, loadSettingsUpdatedAt, saveSettingsUpdatedAt } from "./storage";
 
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
 
@@ -84,4 +84,10 @@ test("moveItem swaps neighbours, returns a new array, and ignores out-of-range m
   expect(moveItem(a, 0, -1)).toEqual(a);
   expect(moveItem(a, 2, 1)).toEqual(a);
   expect(a).toEqual(["A", "B", "C"]);
+});
+
+test("round-trips the settings timestamp, defaulting to 0", () => {
+  expect(loadSettingsUpdatedAt()).toBe(0);
+  saveSettingsUpdatedAt(123);
+  expect(loadSettingsUpdatedAt()).toBe(123);
 });

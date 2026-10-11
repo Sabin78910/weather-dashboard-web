@@ -155,3 +155,20 @@ export function saveTheme(theme: Theme): void {
     // storage unavailable; ignore
   }
 }
+
+const SETTINGS_AT_KEY = "settingsUpdatedAt";
+/** When favourites, unit or theme last changed on this device (ms); decides whose order/choices win when syncing. */
+export function loadSettingsUpdatedAt(): number {
+  try {
+    return Number(localStorage.getItem(SETTINGS_AT_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+export function saveSettingsUpdatedAt(ms: number): void {
+  try {
+    localStorage.setItem(SETTINGS_AT_KEY, String(ms));
+  } catch {
+    // storage unavailable; ignore
+  }
+}

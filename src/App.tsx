@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { compareWithYesterday, convertTemp, formatWind, describe, findPlace, getAirQuality, getWeather, dailyTips, severeOutlook, sceneFor, shareSummary, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { skyFor } from "./sky";
 import { LANGS, detectLang, formatDateTime, freshnessLabel, num, t, type Key, type Lang } from "./i18n";
-import { loadFavourites, saveFavourites, moveItem, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, loadCityForecast, saveCityForecast, loadUnit, saveUnit, loadTheme, saveTheme, type ForecastSnapshot, type Theme } from "./storage";
+import { loadFavourites, saveFavourites, moveItem, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, loadCityForecast, saveCityForecast, loadUnit, saveUnit, loadTheme, saveTheme, loadSettingsUpdatedAt, saveSettingsUpdatedAt, type ForecastSnapshot, type Theme } from "./storage";
+import SyncPanel from "./components/SyncPanel";
+import { useSettingsSync, type SyncSettings } from "./settingsSync";
 import SkyCanvas from "./components/SkyCanvas";
 import Hourly from "./components/Hourly";
 import Daily from "./components/Daily";
@@ -56,6 +58,7 @@ export default function App() {
   const [lang, setLang] = useState<Lang>(() => loadLang() ?? detectLang());
   const [unit, setUnit] = useState<Unit>(() => loadUnit() ?? "C");
   const [theme, setTheme] = useState<Theme | null>(loadTheme);
+  const [settingsAt, setSettingsAt] = useState(loadSettingsUpdatedAt);
   const [cachedAt, setCachedAt] = useState<number | null>(null);
   const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
@@ -77,6 +80,13 @@ export default function App() {
   const f: Fmt = { lang, unit, L, n, temp };
   const changeLang = (next: Lang) => { setLang(next); saveLang(next); };
   const resolvedTheme = theme ?? systemTheme();
+  const applySynced = useCallback((m: SyncSettings) => {
+    setFavourites(m.favourites); saveFavourites(m.favourites);
+    setUnit(m.unit); saveUnit(m.unit);
+    setTheme(m.theme); if (m.theme) saveTheme(m.theme);
+    setSettingsAt(m.updatedAt); saveSettingsUpdatedAt(m.updatedAt);
+  }, []);
+  const sync = useSettingsSync({ favourites, unit, theme, updatedAt: settingsAt }, applySynced);
 
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);
   useEffect(() => {
@@ -178,9 +188,16 @@ export default function App() {
     );
   }
 
+  function touchSettings() {
+    const at = Date.now();
+    setSettingsAt(at);
+    saveSettingsUpdatedAt(at);
+  }
+
   function updateFavourites(next: string[]) {
     setFavourites(next);
     saveFavourites(next);
+    touchSettings();
   }
 
   /** Switch city page: paint the cached forecast instantly, then refresh. */
@@ -375,11 +392,11 @@ export default function App() {
           ))}
         </div>
         <button type="button" className="icon-btn" aria-label={L(resolvedTheme === "dark" ? "themeLight" : "themeDark")} title={L(resolvedTheme === "dark" ? "themeLight" : "themeDark")}
-          onClick={() => { const next = resolvedTheme === "dark" ? "light" : "dark"; setTheme(next); saveTheme(next); }}>
+          onClick={() => { const next = resolvedTheme === "dark" ? "light" : "dark"; setTheme(next); saveTheme(next); touchSettings(); }}>
           <Icon name={resolvedTheme === "dark" ? "sun" : "moon"} />
         </button>
         <button type="button" className="unit-toggle" aria-label={L("switchUnit", { unit: unit === "C" ? "F" : "C" })} title={L("switchUnit", { unit: unit === "C" ? "F" : "C" })}
-          onClick={() => { const next = unit === "C" ? "F" : "C"; tick(); setUnit(next); saveUnit(next); }}>
+          onClick={() => { const next = unit === "C" ? "F" : "C"; tick(); setUnit(next); saveUnit(next); touchSettings(); }}>
           <span className={unit === "C" ? "on" : ""}>°C</span><span className={unit === "F" ? "on" : ""}>°F</span>
         </button>
       </header>
@@ -455,6 +472,7 @@ export default function App() {
           <p className="credit">{L("data")} <a href="https://open-meteo.com/">Open-Meteo</a></p>
         </div>
       </div>
+      <SyncPanel L={L} {...sync} />
     </main>
   );
 }
