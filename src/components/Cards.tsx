@@ -1,10 +1,12 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 import {
   aqiLevel, uvLevel, uvWindow, healthAdvice, gaugeFraction, arcPoint, formatWind, visibleGust, compassPoint,
   formatPressure, pressureTrend, formatVisibility, sunProgress, moonPhase, nowcast, rainSummary, feelsReason,
   AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Weather, type Tip, type SevereOutlook,
 } from "../weather";
 import { t, formatWeekday, type Key } from "../i18n";
+import AirSheet, { BandMark } from "./AirSheet";
+import { aqiBand } from "../air";
 import Icon, { type IconName } from "./icons";
 import type { Fmt } from "./fmt";
 
@@ -51,14 +53,17 @@ export function TipsCard({ tips, f }: { tips: Tip[]; f: Fmt }) {
 
 export function AirCard({ air, f }: { air: AirQuality | null; f: Fmt }) {
   const { L, n, lang } = f;
+  const [open, setOpen] = useState(false);
   return (
     <Card label={L("air")} title={L("air")} icon="leaf" className="small">
       {air ? (
         <>
           <Gauge label={L("airIndex")} value={air.aqi} max={AQI_GAUGE_MAX} color={aqiLevel(air.aqi).color} text={n(air.aqi)} stops={AQI_STOPS} />
           <p className="strong">
-            {L("aqi")} {n(air.aqi)} · {aqiLevel(air.aqi, lang).label}{air.pm25 !== null && ` · ${L("pm25")} ${n(air.pm25)} µg/m³`}
+            <BandMark band={aqiBand(air.aqi)} /> {L("aqi")} {n(air.aqi)} · {aqiLevel(air.aqi, lang).label}{air.pm25 !== null && ` · ${L("pm25")} ${n(air.pm25)} µg/m³`}
           </p>
+          <button type="button" className="link-btn" onClick={() => setOpen(true)}>{L("airDetails")}</button>
+          {open && <AirSheet air={air} f={f} onClose={() => setOpen(false)} />}
         </>
       ) : <p className="muted">{L("airUnavailable")}</p>}
     </Card>

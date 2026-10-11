@@ -211,6 +211,25 @@ test("shows an air quality and UV card with advice", async () => {
   expect(within(uv).getByText(/sunscreen/i)).toBeInTheDocument();
 });
 
+test("opens an air quality detail sheet with band, health line, trend and pollen", async () => {
+  vi.stubGlobal("fetch", withAir(() => json({
+    current: { european_aqi: 65, pm2_5: 30, pm10: 20, ozone: 20 },
+    hourly: { european_aqi: [30, 65, 50], grass_pollen: [1, 30] },
+  })));
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Search" }));
+  const card = await screen.findByRole("region", { name: "Air quality" });
+  await userEvent.click(await within(card).findByRole("button", { name: "Air quality details" }));
+  const sheet = screen.getByRole("dialog", { name: "Air quality details" });
+  expect(within(sheet).getByText(/Poor/)).toBeInTheDocument();
+  expect(within(sheet).getByText(/Main pollutant: PM2\.5/)).toBeInTheDocument();
+  expect(within(sheet).getByText(/Sensitive groups may notice/)).toBeInTheDocument();
+  expect(within(sheet).getByRole("img", { name: /24-hour air quality trend/ })).toBeInTheDocument();
+  expect(within(sheet).getByText(/Grass/)).toBeInTheDocument();
+  await userEvent.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
 test("still shows weather and UV when the air quality API fails", async () => {
   vi.stubGlobal("fetch", withAir(() => Promise.resolve({ ok: false, status: 500 } as Response)));
   render(<App />);
