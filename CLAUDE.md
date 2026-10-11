@@ -34,4 +34,4 @@ Design: sky gradient driven by condition and time of day, glass bento cards, Int
 - `main` is protected: branch, open a PR, merge when CI is green. One issue per PR, under ~300 lines.
 
 ## Done when
-Lint clean, tests pass, CI green, PR opened with a three line summary.
+Lint clean, tests pass, CI green, PR opened with a three line summary. User facing work follows `docs/FEEL.md`.
