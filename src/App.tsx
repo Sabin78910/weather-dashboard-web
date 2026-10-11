@@ -1,17 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { compareWithYesterday, convertTemp, formatWind, describe, findPlace, getAirQuality, getWeather, dailyTips, severeOutlook, sceneFor, shareSummary, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { skyFor } from "./sky";
 import { LANGS, detectLang, formatDateTime, freshnessLabel, num, t, type Key, type Lang } from "./i18n";
 import { loadFavourites, saveFavourites, moveItem, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, loadCityForecast, saveCityForecast, loadUnit, saveUnit, loadTheme, saveTheme, loadSettingsUpdatedAt, saveSettingsUpdatedAt, type ForecastSnapshot, type Theme } from "./storage";
-import SyncPanel from "./components/SyncPanel";
 import { useSettingsSync, type SyncSettings } from "./settingsSync";
 import SkyCanvas from "./components/SkyCanvas";
 import Hourly from "./components/Hourly";
-import Daily from "./components/Daily";
 import { AirCard, FeelsCard, PollenCard, PrecipCard, PressureCard, SevereBanner, SunCard, TipsCard, UvCard, WindCard, nowcastText } from "./components/Cards";
 import Icon from "./components/icons";
 import { motionOK, tick, useCountUp } from "./components/motion";
 import type { Fmt } from "./components/fmt";
+
+const SyncPanel = lazy(() => import("./components/SyncPanel"));
+const Daily = lazy(() => import("./components/Daily"));
 
 type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
@@ -458,7 +459,7 @@ export default function App() {
             <div className="bento">
               <Hourly weather={weather} f={f} scrub={scrub} onScrub={(i) => { if (i !== scrub) tick(4); setScrub(i); }} />
               <PrecipCard weather={weather} f={f} />
-              <Daily weather={weather} f={f} />
+              <Suspense fallback={<div className="card skeleton wide" />}><Daily weather={weather} f={f} /></Suspense>
               <AirCard air={air} f={f} />
               <UvCard weather={weather} air={air} f={f} />
               <WindCard weather={weather} f={f} />
@@ -472,7 +473,7 @@ export default function App() {
           <p className="credit">{L("data")} <a href="https://open-meteo.com/">Open-Meteo</a></p>
         </div>
       </div>
-      <SyncPanel L={L} {...sync} />
+      <Suspense fallback={null}><SyncPanel L={L} {...sync} /></Suspense>
     </main>
   );
 }
