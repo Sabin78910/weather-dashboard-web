@@ -16,6 +16,7 @@ export default function Daily({ weather, f }: { weather: Weather; f: Fmt }) {
     <div className="card daily-card">
     <table className="daily">
       <caption>{L("daily")}</caption>
+      <colgroup><col className="c-day" /><col className="c-cond" /><col className="c-rain" /><col className="c-min" /><col /><col className="c-min" /></colgroup>
       <thead className="sr-only-head"><tr><th scope="col">{L("day")}</th><th scope="col">{L("conditions")}</th><th scope="col">{L("rain")}</th><th scope="col">{L("min")}</th><th scope="col">{L("range")}</th><th scope="col">{L("max")}</th></tr></thead>
       <tbody>
         {days.map((d, i) => {

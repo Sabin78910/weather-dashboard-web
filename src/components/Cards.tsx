@@ -199,6 +199,8 @@ export function SunCard({ weather, f }: { weather: Weather; f: Fmt }) {
 export function nowcastText(weather: Weather, f: Fmt, always = false): string | null {
   const nc = weather.now ? nowcast(weather.minutely ?? [], weather.now) : null;
   if (!nc || (!always && nc.kind === "dry")) return null;
+  if (nc.minutes >= 90 && (nc.kind === "dry" || nc.kind === "continues"))
+    return f.L(nc.kind === "dry" ? "nowDryHours" : "nowContinuesHours", { h: f.n(Math.round(nc.minutes / 60)) });
   const key = { starts: "nowStarts", stops: "nowStops", continues: "nowContinues", dry: "nowDry" } as const;
   return f.L(key[nc.kind], { min: f.n(nc.minutes) });
 }
@@ -212,7 +214,7 @@ export function PrecipCard({ weather, f }: { weather: Weather; f: Fmt }) {
   return (
     <Card label={f.L("precipCard")} title={f.L("precipCard")} icon="drop" className="wide precip">
       {line && <p className="nowcast-line">{line}</p>}
-      {slots.length > 1 && (
+      {slots.length > 1 && slots.some((s) => s.mm >= 0.1) && (
         <>
           <div className="nowbars" role="img" aria-label={f.L("nowChart")}>
             {slots.map((s) => <span key={s.time} className={s.mm >= 0.1 ? "wet" : ""} style={{ height: `${Math.max(6, (s.mm / peak) * 100)}%` }} />)}

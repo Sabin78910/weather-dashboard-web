@@ -87,7 +87,7 @@ function startSky(canvas: HTMLCanvasElement, get: () => SkyState, reduced: boole
     // Sun with slowly turning rays.
     const day = Math.max(0, Math.min(1, (cur.el + 0.15) / 0.3));
     if (day > 0.02) {
-      const sx = w * (0.12 + 0.76 * cur.sunX), sy = h * (0.5 - 0.36 * Math.max(0, cur.el));
+      const sx = w * (0.12 + 0.76 * cur.sunX), sy = h * (0.3 - 0.22 * Math.max(0, cur.el));
       const a = day * (1 - cur.cloud * 0.85);
       ctx!.globalAlpha = a;
       const glow = ctx!.createRadialGradient(sx, sy, 0, sx, sy, 260);
