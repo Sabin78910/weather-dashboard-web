@@ -1,20 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import { compareWithYesterday, convertTemp, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, describe, findPlace, getAirQuality, getWeather, aqiLevel, uvLevel, uvWindow, healthAdvice, dailyTips, rainSummary, severeOutlook, rangeBar, sceneFor, shareSummary, sunProgress, arcPoint, moonPhase, gaugeFraction, compassPoint, AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Place, type Unit, type Weather } from "./weather";
-import { LANGS, detectLang, formatDateTime, formatWeekday, num, t, type Key, type Lang } from "./i18n";
-import WeatherIcon from "./WeatherIcon";
-import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, type ForecastSnapshot } from "./storage";
-
-function Gauge({ label, value, max, color, text }: { label: string; value: number; max: number; color: string; text: string }) {
-  const f = gaugeFraction(value, max);
-  const end = arcPoint(f, 50, 50, 40);
-  return (
-    <svg className="gauge" viewBox="0 0 100 60" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={value}>
-      <path d="M10 50 A40 40 0 0 1 90 50" fill="none" stroke="#ffffff33" strokeWidth="8" strokeLinecap="round" />
-      {f > 0 && <path d={`M10 50 A40 40 0 0 1 ${end.x} ${end.y}`} fill="none" stroke={color} strokeWidth="8" strokeLinecap="round" />}
-      <text x="50" y="48" textAnchor="middle" fontSize="14" fill="currentColor">{text}</text>
-    </svg>
-  );
-}
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { compareWithYesterday, convertTemp, formatWind, describe, findPlace, getAirQuality, getWeather, dailyTips, severeOutlook, sceneFor, shareSummary, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { skyFor } from "./sky";
+import { LANGS, detectLang, formatDateTime, num, t, type Key, type Lang } from "./i18n";
+import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, loadCityForecast, saveCityForecast, loadUnit, saveUnit, loadTheme, saveTheme, type ForecastSnapshot, type Theme } from "./storage";
+import SkyCanvas from "./components/SkyCanvas";
+import Hourly from "./components/Hourly";
+import Daily from "./components/Daily";
+import { AirCard, FeelsCard, PollenCard, PrecipCard, PressureCard, SevereBanner, SunCard, TipsCard, UvCard, WindCard, nowcastText } from "./components/Cards";
+import Icon from "./components/icons";
+import { motionOK, tick, useCountUp } from "./components/motion";
+import type { Fmt } from "./components/fmt";
 
 type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
@@ -23,6 +18,7 @@ const isOffline = (err: unknown) => !navigator.onLine || err instanceof TypeErro
 
 export const RETRY_DELAYS_MS = [2000, 5000, 15000];
 const MY_LOCATION = "My location";
+const SWIPE_PX = 56;
 class NotFoundError extends Error {}
 type ErrorMsg = { key: Key; params?: Record<string, string> };
 
@@ -35,33 +31,62 @@ function ErrorIllustration({ label }: { label: string }) {
   );
 }
 
+const systemTheme = (): Theme => (typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+
+/** Big temperature that counts up; renders a bare text node so "21°C" stays one string. */
+function CountUp({ value, n }: { value: number; n: (v: number) => string }) {
+  return <>{n(useCountUp(value))}</>;
+}
+
 export default function App() {
-  const [query, setQuery] = useState("Kathmandu");
+  const [boot] = useState(() => {
+    const city = loadLastCity() ?? "Kathmandu";
+    return { city, preview: loadCityForecast(city) };
+  });
+  const [query, setQuery] = useState(boot.city);
+  const [preview, setPreview] = useState<ForecastSnapshot | null>(boot.preview);
   const [place, setPlace] = useState<Place | null>(null);
   const [weather, setWeather] = useState<Weather | null>(null);
   const [air, setAir] = useState<AirQuality | null>(null);
   const [error, setError] = useState<ErrorMsg | null>(null);
   const [loading, setLoading] = useState(false);
   const [favourites, setFavourites] = useState<string[]>(loadFavourites);
+  const [fresh, setFresh] = useState<string | null>(null);
   const [lang, setLang] = useState<Lang>(() => loadLang() ?? detectLang());
-  const [unit, setUnit] = useState<Unit>("C");
+  const [unit, setUnit] = useState<Unit>(() => loadUnit() ?? "C");
+  const [theme, setTheme] = useState<Theme | null>(loadTheme);
   const [cachedAt, setCachedAt] = useState<number | null>(null);
   const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [dismissedSevere, setDismissedSevere] = useState<string[]>([]);
+  const [scrub, setScrub] = useState(0);
+  const [slide, setSlide] = useState<"next" | "prev" | null>(null);
   const runId = useRef(0);
+  const swipe = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const heroRef = useRef<HTMLElement>(null);
+
   const L = (key: Key, params?: Record<string, string | number>) => t(lang, key, params);
   const n = (v: number | string) => num(lang, v);
-  const temp = (c: number) => n(Math.round(convertTemp(c, unit)));
   const rawTemp = (c: number) => Math.round(convertTemp(c, unit));
+  const temp = (c: number) => n(rawTemp(c));
+  const f: Fmt = { lang, unit, L, n, temp };
   const changeLang = (next: Lang) => { setLang(next); saveLang(next); };
+  const resolvedTheme = theme ?? systemTheme();
+
+  useEffect(() => { document.documentElement.lang = lang; }, [lang]);
+  useEffect(() => {
+    if (theme) document.documentElement.dataset.theme = theme;
+    else delete document.documentElement.dataset.theme;
+  }, [theme]);
 
   async function fetchForecast(city: string) {
     const p = await findPlace(city);
     if (!p) throw new NotFoundError(city);
-    return { p, w: await getWeather(p) };
+    // Air quality runs in parallel so its card fills in with the forecast, not after it.
+    const airReq = getAirQuality(p);
+    return { p, w: await getWeather(p), airReq };
   }
 
   async function runSearch(city: string) {
@@ -85,18 +110,22 @@ export default function App() {
       }
       if (id !== runId.current) return;
       if (!result) throw failure;
-      const { p, w } = result;
+      const { p, w, airReq } = result;
       setPlace(p);
       setAir(null);
-      void getAirQuality(p).then(setAir);
+      void airReq.then((a) => { if (id === runId.current) setAir(a); });
       setWeather(w);
+      setPreview(null);
       setCachedAt(null);
       setUpdatedAt(Date.now());
       saveLastCity(city);
-      saveForecast({ place: p, weather: w, savedAt: Date.now() });
+      const snap = { place: p, weather: w, savedAt: Date.now() };
+      saveForecast(snap);
+      saveCityForecast([city, p.name], snap);
     } catch (err) {
       if (id !== runId.current) return;
-      const cached: ForecastSnapshot | null = loadForecast();
+      const cached: ForecastSnapshot | null = loadCityForecast(city) ?? loadForecast();
+      setPreview(null);
       if (cached && isOffline(err)) {
         setPlace(cached.place);
         setWeather(cached.weather);
@@ -114,7 +143,7 @@ export default function App() {
     }
   }
 
-  function useMyLocation() {
+  function locateMe() {
     if (!navigator.geolocation) {
       setError({ key: "geoUnsupported" });
       return;
@@ -129,6 +158,7 @@ export default function App() {
           setAir(null);
           void getAirQuality(p).then(setAir);
           setWeather(await getWeather(p));
+          setScrub(0);
         } catch {
           setError({ key: "friendlyError" });
           setWeather(null);
@@ -146,6 +176,21 @@ export default function App() {
   function updateFavourites(next: string[]) {
     setFavourites(next);
     saveFavourites(next);
+  }
+
+  /** Switch city page: paint the cached forecast instantly, then refresh. */
+  function goToCity(city: string, dir: "next" | "prev" | null = null) {
+    if (city === MY_LOCATION) return locateMe();
+    const cached = loadCityForecast(city);
+    if (cached) {
+      setPlace(cached.place);
+      setWeather(cached.weather);
+      setAir(null);
+    }
+    setSlide(dir);
+    setScrub(0);
+    setQuery(city);
+    void runSearch(city);
   }
 
   async function share() {
@@ -181,251 +226,212 @@ export default function App() {
   }
 
   useEffect(() => {
-    const city = loadLastCity() ?? "Kathmandu";
-    setQuery(city);
-    void runSearch(city);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally invalidates the latest run on unmount
-    return () => { runId.current++; };
+    const runs = runId;
+    void runSearch(boot.city);
+    return () => { runs.current++; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; the cleanup invalidates the latest run
   }, []);
 
   function search(e: React.FormEvent) {
     e.preventDefault();
+    setSlide(null);
     void runSearch(query);
   }
 
+  // City pages: the current city (if not saved) followed by favourites.
+  const shown = weather ? place : preview?.place ?? null;
+  const pages = shown && !favourites.includes(shown.name) ? [shown.name, ...favourites] : favourites;
+  const pageIdx = shown ? pages.indexOf(shown.name) : -1;
+  const goPage = (step: 1 | -1) => {
+    const next = pages[pageIdx + step];
+    if (next) { tick(); goToCity(next, step === 1 ? "next" : "prev"); }
+  };
+
+  function onPointerDown(e: PointerEvent<HTMLElement>) {
+    if (pages.length < 2 || (e.pointerType === "mouse" && e.button !== 0)) return;
+    swipe.current = { x: e.clientX, y: e.clientY, moved: false };
+  }
+  function onPointerMove(e: PointerEvent<HTMLElement>) {
+    const s = swipe.current;
+    if (!s) return;
+    const dx = e.clientX - s.x;
+    if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(e.clientY - s.y)) {
+      s.moved = true;
+      heroRef.current?.style.setProperty("--drag", `${Math.max(-120, Math.min(120, dx * 0.6))}px`);
+    }
+  }
+  function onPointerEnd(e: PointerEvent<HTMLElement>) {
+    const s = swipe.current;
+    heroRef.current?.style.removeProperty("--drag");
+    if (!s) return;
+    const dx = e.clientX - s.x;
+    if (Math.abs(dx) >= SWIPE_PX && Math.abs(dx) > 1.5 * Math.abs(e.clientY - s.y)) goPage(dx < 0 ? 1 : -1);
+    // Keep `moved` until the click that follows a drag has been swallowed.
+    setTimeout(() => { swipe.current = null; }, 0);
+  }
+
+  const shownWeather = weather ?? preview?.weather ?? null;
+  const tl = shownWeather?.timeline ?? [];
+  const hour = scrub > 0 ? tl[scrub] : undefined;
+  const sky = useMemo(() => {
+    if (!shownWeather) {
+      const d = new Date();
+      const iso = `2000-01-01T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      return skyFor({ code: 2, isDay: d.getHours() >= 6 && d.getHours() < 18, time: iso, sunrise: "2000-01-01T06:00", sunset: "2000-01-01T18:00" });
+    }
+    const w = shownWeather;
+    return hour
+      ? skyFor({ code: hour.code ?? w.code, isDay: hour.isDay ?? w.isDay, time: hour.time, sunrise: w.sunrise, sunset: w.sunset })
+      : skyFor({ code: w.code, isDay: w.isDay, time: w.now, sunrise: w.sunrise, sunset: w.sunset });
+  }, [shownWeather, hour]);
+  const scene = weather ? (hour ? sceneFor(hour.code ?? weather.code, hour.isDay ?? weather.isDay) : sceneFor(weather.code, weather.isDay)) : "none";
+
+  useEffect(() => {
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", sky.top);
+  }, [sky.top]);
+
+  const placeName = (p: Place) => (p.name === MY_LOCATION ? L("myLocation") : p.country ? `${p.name}, ${p.country}` : p.name);
+  const sev = place && weather ? severeOutlook(weather.days, unit) : null;
+  const sevKey = sev && place ? `${place.name}|${sev.date}` : null;
+  const tips = weather ? dailyTips(weather, air?.aqi ?? null, lang) : [];
+
+  /** Hero for live data, or a preview of the cached forecast while it refreshes (not a landmark until live). */
+  const hero = (p: Place, w: Weather, live: boolean) => {
+    const c = w.days[0] && w.yesterdayMax !== null ? compareWithYesterday(w.days[0].max, w.yesterdayMax) : null;
+    const wind = formatWind(w.wind, unit);
+    const rainLine = nowcastText(w, f);
+    return (
+      <section
+        ref={heroRef} className={`hero${live ? "" : " is-preview"}`} aria-label={live ? L("currentWeather") : undefined} aria-busy={live ? undefined : true}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}
+        onClickCapture={(e) => { if (swipe.current?.moved) e.stopPropagation(); }}
+      >
+        <div className={`hero-inner${slide && motionOK() ? ` from-${slide}` : ""}`} key={p.name}>
+          <h2 className="hero-place">{p.name === MY_LOCATION && <Icon name="pin" size={18} />}{placeName(p)}</h2>
+          <p className="hero-temp"><CountUp value={rawTemp(w.temperature)} n={n} />°{unit}</p>
+          <p className="hero-cond">{L("heroCond", { cond: describe(w.code, lang), wind: n(wind.value), unit: L(wind.unit) })}</p>
+          <div className="hero-row">
+            {w.days[0] && <p className="hero-range">{L("hl", { max: temp(w.days[0].max), min: temp(w.days[0].min) })}</p>}
+            {c && <p className="hero-range hero-delta" aria-live="polite">{c.trend === "same" ? L("sameAsYesterday") : L(c.trend === "warmer" ? "warmerThanYesterday" : "coolerThanYesterday", { diff: n(unit === "F" ? Math.round((c.diff * 9) / 5) : c.diff) })}</p>}
+          </div>
+          <div className="hero-row hero-stats">
+            {w.feelsLike !== null && <p className="hero-range">{L("feelsLike", { temp: temp(w.feelsLike) })}</p>}
+            {w.humidity !== null && <p className="hero-range">{L("humidity", { pct: n(Math.round(w.humidity)) })}</p>}
+          </div>
+          {rainLine && <p className="hero-nowcast"><Icon name="drop" size={16} /> {rainLine}</p>}
+        </div>
+        {live && (
+          <div className="hero-actions">
+            <button type="button" className="glass-btn" aria-label={L("shareAria")} onClick={() => { setShareNote(null); void share(); }}><Icon name="share" size={18} /> {L("share")}</button>
+            {p.name !== MY_LOCATION && !favourites.includes(p.name) && (
+              <button type="button" className="glass-btn" aria-label={L("saveFav", { city: p.name })} onClick={() => { tick(12); setFresh(p.name); updateFavourites([...favourites, p.name]); }}>{L("save")}</button>
+            )}
+            {installEvent && <button type="button" className="glass-btn" onClick={() => void install()}>{L("install")}</button>}
+          </div>
+        )}
+        {live && shareNote && <p className="muted note" role="status">{shareNote}</p>}
+        {pages.length > 1 && pageIdx >= 0 && (
+          <div className="pager">
+            <button type="button" className="icon-btn ghost" aria-label={L("prevCity")} disabled={pageIdx === 0 || loading} onClick={() => goPage(-1)}><Icon name="left" /></button>
+            <span className="dots" aria-hidden="true">{pages.map((pg, i) => <i key={pg} className={i === pageIdx ? "on" : ""} />)}</span>
+            <button type="button" className="icon-btn ghost" aria-label={L("nextCity")} disabled={pageIdx === pages.length - 1 || loading} onClick={() => goPage(1)}><Icon name="right" /></button>
+          </div>
+        )}
+      </section>
+    );
+  };
+
+  const showSkeleton = loading && !weather;
   return (
-    <main>
-      <div className={`sky ${weather ? sceneFor(weather.code, weather.isDay) : "none"}`} data-testid="sky" aria-hidden="true" />
+    <main className="app">
+      <SkyCanvas state={sky} scene={scene} />
       <h1 className="sr-only">{L("title")}</h1>
-      <div className="lang-switch" role="group" aria-label={L("language")}>
-        {LANGS.map((l) => (
-          <button key={l} type="button" lang={l} aria-pressed={lang === l} onClick={() => changeLang(l)}>{l === "en" ? "EN" : "नेपाली"}</button>
-        ))}
-      </div>
+      <header className="topbar">
+        <span className="brand" aria-hidden="true"><Icon name="sun" size={22} /></span>
+        <div className="lang-switch seg" role="group" aria-label={L("language")}>
+          {LANGS.map((l) => (
+            <button key={l} type="button" lang={l} aria-pressed={lang === l} onClick={() => changeLang(l)}>{l === "en" ? "EN" : "नेपाली"}</button>
+          ))}
+        </div>
+        <button type="button" className="icon-btn" aria-label={L(resolvedTheme === "dark" ? "themeLight" : "themeDark")} title={L(resolvedTheme === "dark" ? "themeLight" : "themeDark")}
+          onClick={() => { const next = resolvedTheme === "dark" ? "light" : "dark"; setTheme(next); saveTheme(next); }}>
+          <Icon name={resolvedTheme === "dark" ? "sun" : "moon"} />
+        </button>
+        <button type="button" className="unit-toggle" aria-label={L("switchUnit", { unit: unit === "C" ? "F" : "C" })} title={L("switchUnit", { unit: unit === "C" ? "F" : "C" })}
+          onClick={() => { const next = unit === "C" ? "F" : "C"; tick(); setUnit(next); saveUnit(next); }}>
+          <span className={unit === "C" ? "on" : ""}>°C</span><span className={unit === "F" ? "on" : ""}>°F</span>
+        </button>
+      </header>
       <form className="search" onSubmit={search} role="search">
-        <span className="search-icon" aria-hidden="true">🔍</span>
-        <input aria-label={L("city")} placeholder={L("searchPlaceholder")} value={query} onChange={(e) => setQuery(e.target.value)} />
+        <Icon name="search" className="search-icon" />
+        <input aria-label={L("city")} placeholder={L("searchPlaceholder")} value={query} onChange={(e) => setQuery(e.target.value)} enterKeyHint="search" />
         <button type="submit" className="pill-btn" aria-label={L("search")} disabled={loading}>{loading ? "…" : L("go")}</button>
-        <button type="button" className="icon-btn" aria-label={L("useLocation")} title={L("useLocation")} disabled={loading} onClick={useMyLocation}>📍</button>
-        <button type="button" className="icon-btn" aria-label={L("switchUnit", { unit: unit === "C" ? "F" : "C" })} title={L("switchUnit", { unit: unit === "C" ? "F" : "C" })} onClick={() => setUnit(unit === "C" ? "F" : "C")}>°{unit === "C" ? "F" : "C"}</button>
-        {installEvent && <button type="button" className="pill-btn" onClick={() => void install()}>{L("install")}</button>}
+        <button type="button" className="icon-btn" aria-label={L("useLocation")} title={L("useLocation")} disabled={loading} onClick={locateMe}><Icon name="pin" /></button>
       </form>
       {favourites.length > 0 && (
-        <ul className="row" aria-label={L("favourites")} style={{ listStyle: "none", padding: 0 }}>
+        <ul className="chips" aria-label={L("favourites")}>
           {favourites.map((c) => (
-            <li key={c}>
-              <button type="button" disabled={loading} onClick={() => { setQuery(c); void runSearch(c); }}>{c}</button>
-              <button type="button" aria-label={L("removeFav", { city: c })} onClick={() => updateFavourites(favourites.filter((f) => f !== c))}>✕</button>
+            <li key={c} className={`chip${c === fresh ? " pop" : ""}${shown?.name === c ? " active" : ""}`}>
+              <button type="button" disabled={loading} aria-current={shown?.name === c ? "true" : undefined} onClick={() => goToCity(c)}>{c}</button>
+              <button type="button" className="chip-x" aria-label={L("removeFav", { city: c })} onClick={() => updateFavourites(favourites.filter((x) => x !== c))}><Icon name="x" size={14} /></button>
             </li>
           ))}
         </ul>
       )}
-      <p className="muted" role="status" aria-live="polite">{loading ? L("loading") : ""}</p>
+      <p className="status" role="status" aria-live="polite">{loading ? L("loading") : ""}</p>
       {error && (
         <div className="error-card" role="alert">
           {error.key === "friendlyError" && <ErrorIllustration label={L("errorArt")} />}
           <p>{L(error.key, error.params)}</p>
-          <button type="button" disabled={loading} onClick={() => void runSearch(query)}>{L("retry")}</button>
+          <button type="button" className="pill-btn" disabled={loading} onClick={() => void runSearch(query)}>{L("retry")}</button>
         </div>
       )}
-      {loading && !weather && (
-        <div className="bento" data-testid="skeleton" aria-hidden="true">
-          <div className="card skeleton hero-skeleton wide" />
-          <div className="card skeleton" />
-          <div className="card skeleton" />
-          <div className="card skeleton" />
-        </div>
-      )}
-      {retrying && <p className="muted" role="status">{L("retrying")}{updatedAt !== null && L("lastUpdated", { when: formatDateTime(lang, updatedAt) })}</p>}
-      {cachedAt !== null && <p className="muted" role="status">{L("offline", { when: formatDateTime(lang, cachedAt) })}</p>}
-      {place && weather && (
-        <>
-          <section className="hero" aria-label={L("currentWeather")}>
-            <h2>{place.name === MY_LOCATION ? L("myLocation") : place.country ? `${place.name}, ${place.country}` : place.name}</h2>
-            <WeatherIcon code={weather.code} isDay={weather.isDay} size={72} />
-            <p className="hero-temp">{temp(weather.temperature)}°{unit}</p>
-            {weather.days[0] && weather.yesterdayMax !== null && (() => {
-              const c = compareWithYesterday(weather.days[0].max, weather.yesterdayMax);
-              const diff = unit === "F" ? Math.round((c.diff * 9) / 5) : c.diff;
-              return <p className="hero-range" aria-live="polite">{c.trend === "same" ? L("sameAsYesterday") : L(c.trend === "warmer" ? "warmerThanYesterday" : "coolerThanYesterday", { diff: n(diff) })}</p>;
-            })()}
-            <p className="hero-cond">{L("heroCond", { cond: describe(weather.code, lang), wind: n(formatWind(weather.wind, unit).value), unit: L(formatWind(weather.wind, unit).unit) })}</p>
-            {weather.feelsLike !== null && <p className="hero-range">{L("feelsLike", { temp: temp(weather.feelsLike) })}</p>}
-            {weather.humidity !== null && <p className="hero-range">{L("humidity", { pct: n(Math.round(weather.humidity)) })}</p>}
-            {weather.days[0] && <p className="hero-range">{L("hl", { max: temp(weather.days[0].max), min: temp(weather.days[0].min) })}</p>}
-            <button type="button" aria-label={L("shareAria")} onClick={() => { setShareNote(null); void share(); }}>{L("share")}</button>
-            {shareNote && <p className="muted" role="status">{shareNote}</p>}
-            {place.name !== MY_LOCATION && !favourites.includes(place.name) && (
-              <button type="button" aria-label={L("saveFav", { city: place.name })} onClick={() => updateFavourites([...favourites, place.name])}>{L("save")}</button>
-            )}
-          </section>
-          {(() => {
-            const sev = severeOutlook(weather.days, unit);
-            const key = sev && `${place.name}|${sev.date}`;
-            if (!sev || !key || dismissedSevere.includes(key)) return null;
-            const msg = { storm: "severeStorm", snow: "severeSnow", heat: "severeHeat", cold: "severeCold" } as const;
-            return (
-              <div className="card wide" role="status" aria-label={L("severeLabel")}>
-                <p>{L(msg[sev.kind], { day: formatWeekday(lang, sev.date), temp: sev.temp === null ? "" : n(sev.temp) })}</p>
-                <p className="muted">{L("severeNote")}</p>
-                <button type="button" onClick={() => setDismissedSevere([...dismissedSevere, key])}>{L("dismiss")}</button>
+      {retrying && <p className="note-chip" role="status">{L("retrying")}{updatedAt !== null && L("lastUpdated", { when: formatDateTime(lang, updatedAt) })}</p>}
+      {cachedAt !== null && <p className="note-chip" role="status">{L("offline", { when: formatDateTime(lang, cachedAt) })}</p>}
+      <div className="layout">
+        {place && weather ? hero(place, weather, true)
+          : showSkeleton && preview ? hero(preview.place, preview.weather, false)
+          : showSkeleton ? (
+            <section className="hero is-skeleton" aria-hidden="true">
+              <div className="hero-inner">
+                <h2 className="hero-place">{query}</h2>
+                <span className="sk-temp" />
+                <span className="sk-line" /><span className="sk-line short" />
               </div>
-            );
-          })()}
-          <div className="bento">
-            {dailyTips(weather, air?.aqi ?? null, lang).length > 0 && (
-              <section className="card wide" aria-label={L("tips")}>
-                <h2>{L("tips")}</h2>
-                <ul style={{ listStyle: "none", padding: 0 }}>
-                  {dailyTips(weather, air?.aqi ?? null, lang).map((t) => <li key={t.id}><span aria-hidden="true">{t.icon}</span> {t.text}</li>)}
-                </ul>
-              </section>
-            )}
-            <section className="card" aria-label={L("air")}>
-              <h2>{L("air")}</h2>
-              {air ? (
-                <>
-                  <Gauge label={L("airIndex")} value={air.aqi} max={AQI_GAUGE_MAX} color={aqiLevel(air.aqi).color} text={n(air.aqi)} />
-                  <p style={{ color: aqiLevel(air.aqi).color, fontWeight: 600 }}>
-                    {L("aqi")} {n(air.aqi)} · {aqiLevel(air.aqi, lang).label}{air.pm25 !== null && ` · ${L("pm25")} ${n(air.pm25)} µg/m³`}
-                  </p>
-                </>
-              ) : <p className="muted">{L("airUnavailable")}</p>}
             </section>
-            {air?.pollen && (() => {
-              const { level, species } = air.pollen;
-              const name = ["Low", "Moderate", "High", "Very high"][level] as "Low";
-              return (
-                <section className="card" aria-label={L("pollen")}>
-                  <h2>{L("pollen")}</h2>
-                  <p style={{ fontWeight: 600 }}>
-                    {L("pollenLine", { level: t(lang, `lvl.${name}`), species: species ? t(lang, `pollen.${species}`) : L("pollenNone") })}
-                  </p>
-                </section>
-              );
-            })()}
-            <section className="card" aria-label={L("uvIndex")}>
-              <h2>{L("uvIndex")}</h2>
-              {weather.uv !== null && (
-                <>
-                  <Gauge label={L("uvLevel")} value={weather.uv} max={UV_GAUGE_MAX} color={uvLevel(weather.uv).color} text={n(weather.uv)} />
-                  <p style={{ color: uvLevel(weather.uv).color, fontWeight: 600 }}>{L("uv")} {n(weather.uv)} · {uvLevel(weather.uv, lang).label}</p>
-                </>
-              )}
-              {weather.uvHours.length > 0 && (() => {
-                const win = uvWindow(weather.uvHours);
-                return <p>{win ? L("uvWindow", { start: n(win.start), end: n(win.end) }) : L("uvLow")}</p>;
-              })()}
-              <p className="muted">{healthAdvice(air?.aqi ?? null, weather.uv, lang)}</p>
-            </section>
-            <section className="card" aria-label={L("wind")}>
-              <h2>{L("wind")}</h2>
-              {weather.windDir !== null && (
-                <svg className="compass" viewBox="0 0 100 100" aria-hidden="true">
-                  <circle cx="50" cy="50" r="44" fill="none" stroke="#ffffff55" strokeWidth="2" />
-                  <text x="50" y="16" textAnchor="middle" fontSize="10" fill="currentColor">N</text>
-                  <polygon points="50,24 58,56 50,50 42,56" fill="currentColor" transform={`rotate(${(weather.windDir + 180) % 360} 50 50)`} />
-                </svg>
-              )}
-              <p>{n(formatWind(weather.wind, unit).value)} {L(formatWind(weather.wind, unit).unit)}{weather.windDir !== null && ` · ${compassPoint(weather.windDir, lang)}`}</p>
-              {(() => {
-                const g = visibleGust(weather.wind, weather.gust);
-                if (g === null) return null;
-                const w = formatWind(g, unit);
-                return <p>{L("gusts", { value: n(w.value), unit: L(w.unit) })}</p>;
-              })()}
-            </section>
-            {(weather.pressure !== null || weather.visibility !== null) && (
-              <section className="card" aria-label={L("pressureCard")}>
-                <h2>{L("pressure")}</h2>
-                {weather.pressure !== null && (() => {
-                  const p = formatPressure(weather.pressure, unit);
-                  const trend = pressureTrend(weather.pressureDelta);
-                  return (
-                    <p>
-                      <span>{n(p.value)} {L(p.unit)}</span>
-                      {trend && <> <span aria-hidden="true">{trend === "rising" ? "↑" : trend === "falling" ? "↓" : "→"}</span> <span aria-label={L("trendAria", { trend: L(trend) })}>{L(trend)}</span></>}
-                    </p>
-                  );
-                })()}
-                {weather.visibility !== null && (() => {
-                  const v = formatVisibility(weather.visibility, unit);
-                  return <p>{L("visibility")}: <span>{n(v.value)} {L(v.unit)}</span></p>;
-                })()}
-              </section>
-            )}
-            {weather.sunrise && weather.sunset && weather.now && (() => {
-              const pt = arcPoint(sunProgress(weather.now, weather.sunrise, weather.sunset), 50, 50, 40);
-              const moon = moonPhase(new Date(`${weather.now.slice(0, 10)}T12:00:00Z`));
-              const waxing = moon.phase < 0.5;
-              const rx = (7 * Math.abs(Math.cos(2 * Math.PI * moon.phase))).toFixed(2);
-              return (
-                <section className="card" aria-label={L("sunAria")}>
-                  <h2>{L("sun")}</h2>
-                  <svg className="gauge" viewBox="0 0 100 60" aria-hidden="true">
-                    <path d="M10 50 A40 40 0 0 1 90 50" fill="none" stroke="#ffffff55" strokeWidth="2" strokeDasharray="3 3" />
-                    <line x1="5" y1="50" x2="95" y2="50" stroke="#ffffff55" />
-                    <circle cx={pt.x} cy={pt.y} r="5" fill="#ffe27a" />
-                  </svg>
-                  <p>↑ {n(weather.sunrise.slice(11, 16))} · ↓ {n(weather.sunset.slice(11, 16))}</p>
-                  {weather.daylightMin !== null && (
-                    <p>
-                      {L("daylight", { len: `${n(Math.floor(weather.daylightMin / 60))}h ${n(weather.daylightMin % 60)}m` })}
-                      {weather.daylightDeltaMin !== null && ` · ${weather.daylightDeltaMin === 0 ? L("daylightSame") : L(weather.daylightDeltaMin > 0 ? "daylightLonger" : "daylightShorter", { m: n(Math.abs(weather.daylightDeltaMin)) })}`}
-                    </p>
-                  )}
-                  <p>
-                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                      <circle cx="8" cy="8" r="7" fill="#333a" />
-                      <path d={`M8 1 A7 7 0 0 ${waxing ? 1 : 0} 8 15 A${rx} 7 0 0 ${waxing === moon.illumination < 0.5 ? 0 : 1} 8 1`} fill="#f4f1de" />
-                    </svg>{" "}
-                    {L(`moon_${moon.name}` as Key)} · {L("moonIllum", { pct: n(Math.round(moon.illumination * 100)) })}
-                  </p>
-                </section>
-              );
-            })()}
-            {rainSummary(weather.hours, lang) && <p className="card">{rainSummary(weather.hours, lang)}</p>}
-            <section className="card wide" aria-label={L("hourly")}>
-              <h2>{L("hourly")}</h2>
-              <ul className="hourly" aria-label={L("hourly")}>
-                {weather.hours.map((h) => (
-                  <li key={h.time}><span>{n(h.time.slice(11, 16))}</span><strong>{temp(h.temp)}°</strong></li>
-                ))}
-              </ul>
-            </section>
-          <table className="card wide">
-            <caption>{L("daily")}</caption>
-            <thead><tr><th scope="col">{L("day")}</th><th scope="col">{L("conditions")}</th><th scope="col">{L("rain")}</th><th scope="col">{L("min")}</th><th scope="col">{L("range")}</th><th scope="col">{L("max")}</th></tr></thead>
-            <tbody>
-              {weather.days.map((d) => (
-                <tr key={d.date}>
-                  <td>{formatWeekday(lang, d.date)}</td>
-                  <td><WeatherIcon code={d.code} /> {describe(d.code, lang)}</td>
-                  <td>
-                    {d.rain === null ? "–" : `${n(d.rain)}%`}
-                    {(() => {
-                      const p = formatPrecip(d.precip, unit);
-                      if (!p) return null;
-                      const amount = n(p.value), u = L(p.unit === "mm" ? "mm" : "inch");
-                      return <> <span className="muted" aria-label={L("precipAria", { amount, unit: u })}>{amount} {u}</span></>;
-                    })()}
-                  </td>
-                  <td>{temp(d.min)}°</td>
-                  <td>
-                    <div className="range" role="meter" aria-label={L("rangeAria", { min: temp(d.min), max: temp(d.max), unit })}
-                      aria-valuemin={rawTemp(d.min)} aria-valuemax={rawTemp(d.max)} aria-valuenow={rawTemp(d.max)}>
-                      <span style={{ left: `${rangeBar(d, weather.days).left}%`, width: `${rangeBar(d, weather.days).width}%` }} />
-                    </div>
-                  </td>
-                  <td>{temp(d.max)}°</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        </>
-      )}
-      <p className="muted card">{L("data")} <a href="https://open-meteo.com/">Open-Meteo</a></p>
+          ) : null}
+        <div className="content">
+          {sev && sevKey && !dismissedSevere.includes(sevKey) && (
+            <SevereBanner sev={sev} f={f} onDismiss={() => setDismissedSevere([...dismissedSevere, sevKey])} />
+          )}
+          {showSkeleton && (
+            <div className="bento" data-testid="skeleton" aria-hidden="true">
+              <div className="card skeleton wide sk-tall" />
+              <div className="card skeleton wide" />
+              <div className="card skeleton" />
+              <div className="card skeleton" />
+              <div className="card skeleton" />
+              <div className="card skeleton" />
+            </div>
+          )}
+          {place && weather && (
+            <div className="bento">
+              <Hourly weather={weather} f={f} scrub={scrub} onScrub={(i) => { if (i !== scrub) tick(4); setScrub(i); }} />
+              <PrecipCard weather={weather} f={f} />
+              <Daily weather={weather} f={f} />
+              <AirCard air={air} f={f} />
+              <UvCard weather={weather} air={air} f={f} />
+              <WindCard weather={weather} f={f} />
+              <FeelsCard weather={weather} f={f} />
+              <SunCard weather={weather} f={f} />
+              <PressureCard weather={weather} f={f} />
+              {air && <PollenCard air={air} f={f} />}
+              {tips.length > 0 && <TipsCard tips={tips} f={f} />}
+            </div>
+          )}
+          <p className="credit">{L("data")} <a href="https://open-meteo.com/">Open-Meteo</a></p>
+        </div>
+      </div>
     </main>
   );
 }

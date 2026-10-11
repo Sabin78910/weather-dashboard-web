@@ -1,4 +1,4 @@
-import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase, severeOutlook, uvWindow, pollenLevel, todaysPollen, SEVERE_HEAT_C, SEVERE_COLD_C, type DayForecast } from "./weather";
+import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase, severeOutlook, uvWindow, pollenLevel, todaysPollen, SEVERE_HEAT_C, SEVERE_COLD_C, floor15, nowcast, feelsReason, type DayForecast } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -61,7 +61,7 @@ test("getWeather requests 7 days with rain chance and tolerates missing rain dat
   const w = await getWeather({ name: "K", country: "N", latitude: 1, longitude: 2 }, f as unknown as typeof fetch);
   const url = String((f.mock.calls[0] as unknown[])[0]);
   expect(url).toContain("precipitation_probability_max");
-  expect(url).toContain("forecast_days=7");
+  expect(url).toContain("forecast_days=10");
   expect(url).toContain("precipitation_sum");
   expect(w.days[0].rain).toBeNull();
   expect(w.days[0].precip).toBeNull();
@@ -478,4 +478,67 @@ test("todaysPollen picks the peak level and dominant species, handling missing d
   expect(todaysPollen({ grass_pollen: [null, null] })).toBeNull();
   expect(todaysPollen({})).toBeNull();
   expect(todaysPollen(undefined)).toBeNull();
+});
+
+describe("v2 data: 24h timeline, 15-minute nowcast, feels-like reason", () => {
+  const body = (extra: object = {}) => ({
+    current: { time: "2026-10-08T10:20", temperature_2m: 20, wind_speed_10m: 5, weather_code: 61, is_day: 1 },
+    daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61] },
+    hourly: {
+      time: Array.from({ length: 48 }, (_, i) => `2026-10-${i < 24 ? "08" : "09"}T${String(i % 24).padStart(2, "0")}:00`),
+      temperature_2m: Array.from({ length: 48 }, (_, i) => i),
+      precipitation_probability: Array.from({ length: 48 }, () => 40),
+      weather_code: Array.from({ length: 48 }, () => 3),
+      is_day: Array.from({ length: 48 }, (_, i) => (i % 24 >= 6 && i % 24 < 18 ? 1 : 0)),
+    },
+    minutely_15: { time: ["2026-10-08T10:00", "2026-10-08T10:15", "2026-10-08T10:30", "2026-10-08T10:45"], precipitation: [0.5, 0, 0.2, null] },
+    ...extra,
+  });
+  const f = (b: object) => vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(b) } as Response));
+
+  test("requests 10 days, hourly codes and 15-minute precipitation", async () => {
+    const fetch = f(body());
+    await getWeather({ name: "X", country: "", latitude: 1, longitude: 2 }, fetch);
+    const url = String((fetch.mock.calls[0] as unknown[])[0]);
+    expect(url).toContain("weather_code,is_day");
+    expect(url).toContain("minutely_15=precipitation");
+  });
+
+  test("builds a 24-hour timeline from the current hour and slots from the current quarter", async () => {
+    const w = await getWeather({ name: "X", country: "", latitude: 1, longitude: 2 }, f(body()));
+    expect(w.timeline).toHaveLength(24);
+    expect(w.timeline![0]).toEqual({ time: "2026-10-08T10:00", temp: 10, rain: 40, code: 3, isDay: true });
+    expect(w.timeline![10].isDay).toBe(false);
+    expect(w.minutely).toEqual([{ time: "2026-10-08T10:15", mm: 0 }, { time: "2026-10-08T10:30", mm: 0.2 }]);
+    expect(w.hours).toHaveLength(12);
+  });
+
+  test("timeline fields are null and minutely empty when the API omits them", async () => {
+    const b = body();
+    const w = await getWeather({ name: "X", country: "", latitude: 1, longitude: 2 }, f({ ...b, minutely_15: undefined, hourly: { time: b.hourly.time, temperature_2m: b.hourly.temperature_2m } }));
+    expect(w.timeline![0]).toEqual({ time: "2026-10-08T10:00", temp: 10, rain: null, code: null, isDay: null });
+    expect(w.minutely).toEqual([]);
+  });
+
+  test("floor15 rounds down to the quarter hour", () => {
+    expect(floor15("2026-10-08T10:44")).toBe("2026-10-08T10:30");
+    expect(floor15("2026-10-08T10:00")).toBe("2026-10-08T10:00");
+    expect(floor15("")).toBe("");
+  });
+
+  const slots = (mm: number[]) => mm.map((v, i) => ({ time: `2026-10-08T${String(10 + Math.floor(i / 4)).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")}`, mm: v }));
+  test("nowcast says when rain starts, stops, continues or stays away", () => {
+    expect(nowcast(slots([0, 0, 0.4, 1, 0, 0, 0, 0]), "2026-10-08T10:00")).toEqual({ kind: "starts", minutes: 30 });
+    expect(nowcast(slots([0.6, 0.3, 0, 0, 0, 0, 0, 0]), "2026-10-08T10:05")).toEqual({ kind: "stops", minutes: 25 });
+    expect(nowcast(slots([0.6, 0.3, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]), "2026-10-08T10:00")).toEqual({ kind: "continues", minutes: 120 });
+    expect(nowcast(slots([0, 0, 0, 0, 0, 0, 0, 0.05]), "2026-10-08T10:00")).toEqual({ kind: "dry", minutes: 120 });
+    expect(nowcast(slots([0, 0.2]), "2026-10-08T10:14")).toEqual({ kind: "starts", minutes: 5 });
+    expect(nowcast(slots([0]), "2026-10-08T10:00")).toBeNull();
+  });
+
+  test("feels-like reason: wind chill, humidity, or similar", () => {
+    expect(feelsReason(10, 7)).toBe("wind");
+    expect(feelsReason(30, 34)).toBe("humid");
+    expect(feelsReason(20, 21)).toBe("similar");
+  });
 });
