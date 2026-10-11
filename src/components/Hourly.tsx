@@ -1,5 +1,5 @@
 import { useRef, type PointerEvent } from "react";
-import { convertTemp, describe, type Weather } from "../weather";
+import { convertTemp, describe, formatWind, type Weather } from "../weather";
 import { tempColor } from "../sky";
 import WeatherIcon from "../WeatherIcon";
 import Icon from "./icons";
@@ -40,10 +40,13 @@ export default function Hourly({ weather, f, scrub, onScrub }: { weather: Weathe
     const line = smooth(pts);
     const W = last * 10;
     const pct = (si / last) * 100;
+    const wind = sel.wind !== null ? formatWind(sel.wind, unit) : null;
+    const windText = wind ? L("scrubWind", { v: n(wind.value), unit: L(wind.unit) }) : "";
+    const uvText = sel.uv !== null ? L("scrubUv", { uv: n(Math.round(sel.uv * 10) / 10) }) : "";
     const valueText = L("scrubValue", {
       time: label(si, sel.time), temp: temp(sel.temp), cond: describe(sel.code ?? weather.code, lang),
       rain: sel.rain !== null ? L("rainPct", { pct: n(sel.rain) }) : "",
-    });
+    }) + [windText, uvText].filter(Boolean).map((x) => `, ${x}`).join("");
     chart = (
       <>
         <div className="scrub-readout">
@@ -51,6 +54,8 @@ export default function Hourly({ weather, f, scrub, onScrub }: { weather: Weathe
           {sel.code !== null && <WeatherIcon code={sel.code} isDay={sel.isDay ?? true} size={22} lang={lang} />}
           <span className="scrub-temp">{temp(sel.temp)}°</span>
           <span className="scrub-cond">{describe(sel.code ?? weather.code, lang)}{sel.rain ? ` · ${n(sel.rain)}%` : ""}</span>
+          {windText && <span className="scrub-cond">{n(wind!.value)} {L(wind!.unit)}</span>}
+          {uvText && <span className="scrub-cond">{uvText}</span>}
           {scrub > 0 && <button type="button" className="chip-btn" onClick={() => onScrub(0)}>{L("backToNow")}</button>}
         </div>
         <div

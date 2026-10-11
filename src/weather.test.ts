@@ -490,6 +490,8 @@ describe("v2 data: 24h timeline, 15-minute nowcast, feels-like reason", () => {
       precipitation_probability: Array.from({ length: 48 }, () => 40),
       weather_code: Array.from({ length: 48 }, () => 3),
       is_day: Array.from({ length: 48 }, (_, i) => (i % 24 >= 6 && i % 24 < 18 ? 1 : 0)),
+      wind_speed_10m: Array.from({ length: 48 }, (_, i) => i + 0.5),
+      uv_index: Array.from({ length: 48 }, (_, i) => (i === 11 ? null : i / 10)),
     },
     minutely_15: { time: ["2026-10-08T10:00", "2026-10-08T10:15", "2026-10-08T10:30", "2026-10-08T10:45"], precipitation: [0.5, 0, 0.2, null] },
     ...extra,
@@ -501,13 +503,16 @@ describe("v2 data: 24h timeline, 15-minute nowcast, feels-like reason", () => {
     await getWeather({ name: "X", country: "", latitude: 1, longitude: 2 }, fetch);
     const url = String((fetch.mock.calls[0] as unknown[])[0]);
     expect(url).toContain("weather_code,is_day");
+    expect(url).toMatch(/hourly=[^&]*wind_speed_10m/);
     expect(url).toContain("minutely_15=precipitation");
   });
 
   test("builds a 24-hour timeline from the current hour and slots from the current quarter", async () => {
     const w = await getWeather({ name: "X", country: "", latitude: 1, longitude: 2 }, f(body()));
     expect(w.timeline).toHaveLength(24);
-    expect(w.timeline![0]).toEqual({ time: "2026-10-08T10:00", temp: 10, rain: 40, code: 3, isDay: true });
+    expect(w.timeline![0]).toEqual({ time: "2026-10-08T10:00", temp: 10, rain: 40, code: 3, isDay: true, wind: 10.5, uv: 1 });
+    
+    expect(w.timeline![0].uv).toBe(1);
     expect(w.timeline![10].isDay).toBe(false);
     expect(w.minutely).toEqual([{ time: "2026-10-08T10:15", mm: 0 }, { time: "2026-10-08T10:30", mm: 0.2 }]);
     expect(w.hours).toHaveLength(12);
@@ -516,7 +521,7 @@ describe("v2 data: 24h timeline, 15-minute nowcast, feels-like reason", () => {
   test("timeline fields are null and minutely empty when the API omits them", async () => {
     const b = body();
     const w = await getWeather({ name: "X", country: "", latitude: 1, longitude: 2 }, f({ ...b, minutely_15: undefined, hourly: { time: b.hourly.time, temperature_2m: b.hourly.temperature_2m } }));
-    expect(w.timeline![0]).toEqual({ time: "2026-10-08T10:00", temp: 10, rain: null, code: null, isDay: null });
+    expect(w.timeline![0]).toEqual({ time: "2026-10-08T10:00", temp: 10, rain: null, code: null, isDay: null, wind: null, uv: null });
     expect(w.minutely).toEqual([]);
   });
 
