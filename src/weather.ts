@@ -7,7 +7,7 @@ export interface UvHour { time: string; uv: number | null; }
 export interface Weather { timeline?: TimelineHour[]; minutely?: Slot[]; temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; gust: number | null; daylightMin: number | null; daylightDeltaMin: number | null; uvHours: UvHour[]; }
 export interface AirQuality { aqi: number; pm25: number | null; pollen: Pollen | null; }
 /** One hour of the 24-hour scrubber timeline; null fields are missing from the API response. */
-export interface TimelineHour { time: string; temp: number; rain: number | null; code: number | null; isDay: boolean | null; }
+export interface TimelineHour { time: string; temp: number; rain: number | null; code: number | null; isDay: boolean | null; wind: number | null; uv: number | null; }
 /** Precipitation (mm) in one 15-minute slot. */
 export interface Slot { time: string; mm: number; }
 
@@ -60,7 +60,7 @@ export async function findPlace(query: string, f: Fetch = fetch): Promise<Place 
 export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
-    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m,pressure_msl,visibility,wind_gusts_10m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability,pressure_msl,uv_index,weather_code,is_day&minutely_15=precipitation&forecast_minutely_15=12&timezone=auto&forecast_days=10&past_days=1`;
+    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m,pressure_msl,visibility,wind_gusts_10m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability,pressure_msl,uv_index,weather_code,is_day,wind_speed_10m&minutely_15=precipitation&forecast_minutely_15=12&timezone=auto&forecast_days=10&past_days=1`;
   const res = await f(url);
   if (!res.ok) throw new Error(`Forecast failed (${res.status})`);
   const d = await res.json();
@@ -86,7 +86,7 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const timeline: TimelineHour[] = times.slice(start, start + TIMELINE_HOURS).map((time, k) => {
     const i = start + k;
     const isDay = d.hourly.is_day?.[i];
-    return { time, temp: d.hourly.temperature_2m[i], rain: finite(d.hourly.precipitation_probability?.[i]), code: finite(d.hourly.weather_code?.[i]), isDay: typeof isDay === "number" ? isDay !== 0 : null };
+    return { time, temp: d.hourly.temperature_2m[i], rain: finite(d.hourly.precipitation_probability?.[i]), code: finite(d.hourly.weather_code?.[i]), isDay: typeof isDay === "number" ? isDay !== 0 : null, wind: finite(d.hourly.wind_speed_10m?.[i]), uv: finite(d.hourly.uv_index?.[i]) };
   });
   const slot0 = floor15(String(d.current.time ?? ""));
   const m = d.minutely_15;

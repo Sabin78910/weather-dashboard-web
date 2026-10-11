@@ -13,6 +13,8 @@ const forecast = () => ({
     precipitation_probability: hours.map((_, i) => (i === 15 ? 80 : 0)),
     weather_code: hours.map((_, i) => (i === 15 ? 63 : 1)),
     is_day: hours.map((_, i) => (i % 24 >= 6 && i % 24 < 18 ? 1 : 0)),
+    wind_speed_10m: hours.map((_, i) => (i === 15 ? 20 : 5)),
+    uv_index: hours.map((_, i) => (i === 15 ? 3.4 : 0)),
   },
   minutely_15: { time: ["2026-10-08T10:00", "2026-10-08T10:15", "2026-10-08T10:30", "2026-10-08T10:45", "2026-10-08T11:00"], precipitation: [0, 0, 0, 0.5, 0.8] },
 });
@@ -63,7 +65,9 @@ test("scrubbing the 24-hour timeline updates the readout and the sky, and Back t
   const slider = await screen.findByRole("slider", { name: "Scrub through the next 24 hours" });
   expect(screen.getByTestId("sky")).toHaveClass("clear-day");
   fireEvent.change(slider, { target: { value: "5" } });
-  expect(slider).toHaveAttribute("aria-valuetext", "15:00: 25°, Rain, rain 80%");
+  expect(slider).toHaveAttribute("aria-valuetext", "15:00: 25°, Rain, rain 80%, wind 20 km/h, UV 3.4");
+  expect(screen.getByText("20 km/h")).toBeInTheDocument();
+  expect(screen.getByText("UV 3.4")).toBeInTheDocument();
   expect(screen.getByTestId("sky")).toHaveClass("rain-day");
   await userEvent.click(screen.getByRole("button", { name: "Back to now" }));
   expect(screen.getByTestId("sky")).toHaveClass("clear-day");
