@@ -170,3 +170,27 @@ test("favourite chips can be moved left/right; order persists and drives the pag
   await userEvent.click(within(list).getByRole("button", { name: "Move Oslo left" }));
   expect(JSON.parse(localStorage.getItem("favourites")!)).toEqual(["Oslo", "Pokhara"]);
 });
+
+describe("sync panel", () => {
+  afterEach(() => localStorage.clear());
+  test("turning sync on stores a shared code and shows it; turning off clears it", async () => {
+    vi.stubGlobal("fetch", mockFetch());
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByText("Sync across devices"));
+    await user.click(screen.getByRole("button", { name: "Turn on sync" }));
+    expect(localStorage.getItem("sabin-labs-sync-code")).toMatch(/^SS1-/);
+    expect(screen.getByLabelText(/Your sync code/)).toHaveValue(localStorage.getItem("sabin-labs-sync-code"));
+    await user.click(screen.getByRole("button", { name: "Turn off sync" }));
+    expect(localStorage.getItem("sabin-labs-sync-code")).toBeNull();
+  });
+  test("rejects an invalid code from another device", async () => {
+    vi.stubGlobal("fetch", mockFetch());
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByText("Sync across devices"));
+    await user.type(screen.getByLabelText("Sync code from another device"), "nope");
+    await user.click(screen.getByRole("button", { name: "Use code" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("not valid");
+  });
+});

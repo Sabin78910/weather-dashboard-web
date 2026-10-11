@@ -1,11 +1,11 @@
-/** Content-Security-Policy for the production build: same-origin code and styles, Open-Meteo APIs only. */
+/** Content-Security-Policy for the production build: same-origin code and styles, Open-Meteo APIs and the encrypted sync API. */
 export const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src 'self' https://api.open-meteo.com https://geocoding-api.open-meteo.com https://air-quality-api.open-meteo.com",
+  "connect-src 'self' https://api.open-meteo.com https://geocoding-api.open-meteo.com https://air-quality-api.open-meteo.com https://sync-api.sabin-apps.workers.dev",
   "manifest-src 'self'",
   "worker-src 'self'",
   "object-src 'none'",
