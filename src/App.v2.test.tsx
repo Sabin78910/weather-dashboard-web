@@ -151,3 +151,18 @@ describe("data freshness", () => {
     await waitFor(() => expect(forecastCalls(f)).toBe(before + 1));
   });
 });
+
+test("favourite chips can be moved left/right; order persists and drives the pager", async () => {
+  localStorage.setItem("favourites", '["Oslo","Pokhara"]');
+  vi.stubGlobal("fetch", mockFetch());
+  render(<App />);
+  await screen.findByText("Pokhara, Nepal");
+  const list = screen.getByRole("list", { name: "Favourite cities" });
+  expect(within(list).getByRole("button", { name: "Move Oslo left" })).toBeDisabled();
+  expect(within(list).getByRole("button", { name: "Move Pokhara right" })).toBeDisabled();
+  await userEvent.click(within(list).getByRole("button", { name: "Move Oslo right" }));
+  expect(JSON.parse(localStorage.getItem("favourites")!)).toEqual(["Pokhara", "Oslo"]);
+  expect(within(list).getAllByRole("listitem").map((li) => li.querySelector(".chip-name")!.textContent)).toEqual(["Pokhara", "Oslo"]);
+  await userEvent.click(within(list).getByRole("button", { name: "Move Oslo left" }));
+  expect(JSON.parse(localStorage.getItem("favourites")!)).toEqual(["Oslo", "Pokhara"]);
+});

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { compareWithYesterday, convertTemp, formatWind, describe, findPlace, getAirQuality, getWeather, dailyTips, severeOutlook, sceneFor, shareSummary, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { skyFor } from "./sky";
 import { LANGS, detectLang, formatDateTime, freshnessLabel, num, t, type Key, type Lang } from "./i18n";
-import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, loadCityForecast, saveCityForecast, loadUnit, saveUnit, loadTheme, saveTheme, type ForecastSnapshot, type Theme } from "./storage";
+import { loadFavourites, saveFavourites, moveItem, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, loadCityForecast, saveCityForecast, loadUnit, saveUnit, loadTheme, saveTheme, type ForecastSnapshot, type Theme } from "./storage";
 import SkyCanvas from "./components/SkyCanvas";
 import Hourly from "./components/Hourly";
 import Daily from "./components/Daily";
@@ -391,9 +391,11 @@ export default function App() {
       </form>
       {favourites.length > 0 && (
         <ul className="chips" aria-label={L("favourites")}>
-          {favourites.map((c) => (
+          {favourites.map((c, i) => (
             <li key={c} className={`chip${c === fresh ? " pop" : ""}${shown?.name === c ? " active" : ""}`}>
-              <button type="button" disabled={loading} aria-current={shown?.name === c ? "true" : undefined} onClick={() => goToCity(c)}>{c}</button>
+              <button type="button" className="chip-mv" aria-label={L("moveLeft", { city: c })} disabled={i === 0} onClick={() => updateFavourites(moveItem(favourites, i, -1))}>‹</button>
+              <button type="button" className="chip-name" disabled={loading} aria-current={shown?.name === c ? "true" : undefined} onClick={() => goToCity(c)}>{c}</button>
+              <button type="button" className="chip-mv" aria-label={L("moveRight", { city: c })} disabled={i === favourites.length - 1} onClick={() => updateFavourites(moveItem(favourites, i, 1))}>›</button>
               <button type="button" className="chip-x" aria-label={L("removeFav", { city: c })} onClick={() => updateFavourites(favourites.filter((x) => x !== c))}><Icon name="x" size={14} /></button>
             </li>
           ))}

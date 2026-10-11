@@ -38,6 +38,15 @@ export function saveFavourites(cities: string[]): void {
   }
 }
 
+/** Returns a copy with the item at `from` shifted by `delta`; out-of-range moves return an unchanged copy. */
+export function moveItem<T>(list: T[], from: number, delta: number): T[] {
+  const to = from + delta;
+  const next = [...list];
+  if (from < 0 || from >= list.length || to < 0 || to >= list.length) return next;
+  [next[from], next[to]] = [next[to], next[from]];
+  return next;
+}
+
 const FORECAST_KEY = "lastForecast";
 
 export type ForecastSnapshot = { place: Place; weather: Weather; savedAt: number };
