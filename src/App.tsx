@@ -7,6 +7,7 @@ import { useSettingsSync, type SyncSettings } from "./settingsSync";
 import SkyCanvas from "./components/SkyCanvas";
 import Hourly from "./components/Hourly";
 import { AirCard, FeelsCard, PollenCard, PrecipCard, PressureCard, SevereBanner, SunCard, TipsCard, UvCard, WindCard, nowcastText } from "./components/Cards";
+import { canPoll, isStale, modelTime } from "./refresh";
 import Icon from "./components/icons";
 import { motionOK, tick, useCountUp } from "./components/motion";
 import type { Fmt } from "./components/fmt";
@@ -19,10 +20,11 @@ type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Pro
 // A failed fetch (rather than an HTTP/API error) means the network is unreachable.
 const isOffline = (err: unknown) => !navigator.onLine || err instanceof TypeError;
 
-export const STALE_MS = 10 * 60_000;
 export const RETRY_DELAYS_MS = [2000, 5000, 15000];
 const MY_LOCATION = "My location";
 const SWIPE_PX = 56;
+/** Minimum gap between automatic refresh attempts, so a slow or failing request is not stacked. */
+const ATTEMPT_GAP_MS = 2 * 60_000;
 class NotFoundError extends Error {}
 type ErrorMsg = { key: Key; params?: Record<string, string> };
 
@@ -70,6 +72,7 @@ export default function App() {
   const [slide, setSlide] = useState<"next" | "prev" | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const runId = useRef(0);
+  const lastAttempt = useRef(0);
   const refreshOnFocus = useRef<() => void>(() => {});
   const swipe = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const heroRef = useRef<HTMLElement>(null);
@@ -243,12 +246,18 @@ export default function App() {
 
   const dataAt = cachedAt ?? updatedAt;
   refreshOnFocus.current = () => {
-    if (loading || dataAt === null || !place || Date.now() - dataAt < STALE_MS) return;
+    const at = Date.now();
+    if (loading || !place || !isStale(dataAt, at) || at - lastAttempt.current < ATTEMPT_GAP_MS) return;
+    lastAttempt.current = at;
     if (place.name === MY_LOCATION) locateMe();
     else void runSearch(place.name);
   };
   useEffect(() => {
-    const tickId = setInterval(() => setNow(Date.now()), 60_000);
+    const tickId = setInterval(() => {
+      setNow(Date.now());
+      // Scheduled refresh: only while visible and online, and only once the data is a full interval old.
+      if (canPoll(document.visibilityState !== "hidden", navigator.onLine)) refreshOnFocus.current();
+    }, 60_000);
     const onVisible = () => {
       if (document.visibilityState !== "hidden") { setNow(Date.now()); refreshOnFocus.current(); }
     };
@@ -356,7 +365,7 @@ export default function App() {
             {w.feelsLike !== null && <p className="hero-range">{L("feelsLike", { temp: temp(w.feelsLike) })}</p>}
             {w.humidity !== null && <p className="hero-range">{L("humidity", { pct: n(Math.round(w.humidity)) })}</p>}
           </div>
-          {live && dataAt !== null && <p className="hero-range hero-fresh">{freshnessLabel(lang, now - dataAt)}</p>}
+          {live && dataAt !== null && <p className="hero-range hero-fresh">{freshnessLabel(lang, now - dataAt)}{modelTime(w.now) && <span className="hero-model"> · {L("modelTime", { time: n(modelTime(w.now) as string) })}</span>}</p>}
           {rainLine && <p className="hero-nowcast"><Icon name="drop" size={16} /> {rainLine}</p>}
         </div>
         {live && (

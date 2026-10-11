@@ -132,9 +132,9 @@ describe("data freshness", () => {
   test("hero shows the age, updating each minute", async () => {
     start();
     const hero = await screen.findByRole("region", { name: "Current weather" });
-    expect(within(hero).getByText("Updated just now")).toBeInTheDocument();
+    expect(within(hero).getByText("Updated just now", { exact: false })).toBeInTheDocument();
     await act(async () => { vi.advanceTimersByTime(3 * 60_000); });
-    expect(within(hero).getByText("Updated 3 min ago")).toBeInTheDocument();
+    expect(within(hero).getByText("Updated 3 min ago", { exact: false })).toBeInTheDocument();
   });
 
   test("shows Nepali digits", async () => {
@@ -142,17 +142,45 @@ describe("data freshness", () => {
     start();
     const hero = await screen.findByRole("region", { name: /हालको|Current/ });
     await act(async () => { vi.advanceTimersByTime(2 * 60_000); });
-    expect(within(hero).getByText("२ मिनेट अघि अपडेट भयो")).toBeInTheDocument();
+    expect(within(hero).getByText("२ मिनेट अघि अपडेट भयो", { exact: false })).toBeInTheDocument();
   });
 
-  test("refreshes on tab focus only when data is older than 10 minutes", async () => {
+  test("refreshes on tab focus only when data is older than 15 minutes", async () => {
     const f = start();
     await screen.findByRole("region", { name: "Current weather" });
     const before = forecastCalls(f);
-    await act(async () => { vi.advanceTimersByTime(5 * 60_000); document.dispatchEvent(new Event("visibilitychange")); });
+    const hidden = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await act(async () => { vi.advanceTimersByTime(10 * 60_000); });
+    hidden.mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
     expect(forecastCalls(f)).toBe(before);
-    await act(async () => { vi.advanceTimersByTime(6 * 60_000); document.dispatchEvent(new Event("visibilitychange")); });
+    hidden.mockReturnValue("hidden");
+    await act(async () => { vi.advanceTimersByTime(6 * 60_000); });
+    hidden.mockReturnValue("visible");
+    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+    hidden.mockRestore();
     await waitFor(() => expect(forecastCalls(f)).toBe(before + 1));
+  });
+
+  test("refreshes by itself every 15 minutes while visible, and shows the model time", async () => {
+    const f = start();
+    const hero = await screen.findByRole("region", { name: "Current weather" });
+    expect(within(hero).getByText(/Model data from 10:15/)).toBeInTheDocument();
+    const before = forecastCalls(f);
+    await act(async () => { vi.advanceTimersByTime(10 * 60_000); });
+    expect(forecastCalls(f)).toBe(before);
+    await act(async () => { vi.advanceTimersByTime(6 * 60_000); });
+    await waitFor(() => expect(forecastCalls(f)).toBe(before + 1));
+  });
+
+  test("does not poll while the tab is hidden", async () => {
+    const f = start();
+    await screen.findByRole("region", { name: "Current weather" });
+    const before = forecastCalls(f);
+    const spy = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await act(async () => { vi.advanceTimersByTime(40 * 60_000); });
+    spy.mockRestore();
+    expect(forecastCalls(f)).toBe(before);
   });
 });
 
