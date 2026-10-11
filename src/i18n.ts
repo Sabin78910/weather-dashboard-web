@@ -23,6 +23,8 @@ export const EN = {
   geoFailed: "Could not determine your location",
   retrying: "Having trouble connecting, retrying…",
   lastUpdated: " Last updated {when}",
+  updatedNow: "Updated just now",
+  updatedMin: "Updated {n} min ago",
   offline: "Offline · last updated {when}",
   currentWeather: "Current weather",
   heroCond: "{cond} · wind {wind} {unit}",
@@ -181,6 +183,8 @@ export const NE: Record<Key, string> = {
   geoFailed: "तपाईंको स्थान पत्ता लगाउन सकिएन",
   retrying: "जडान गर्न समस्या भइरहेको छ, फेरि प्रयास गर्दैछ…",
   lastUpdated: " पछिल्लो अपडेट {when}",
+  updatedNow: "भर्खरै अपडेट भयो",
+  updatedMin: "{n} मिनेट अघि अपडेट भयो",
   offline: "अफलाइन · पछिल्लो अपडेट {when}",
   currentWeather: "हालको मौसम",
   heroCond: "{cond} · हावा {wind} {unit}",
@@ -323,6 +327,12 @@ const DEVANAGARI = "०१२३४५६७८९";
 /** Renders digits in the language's numerals (Devanagari for Nepali). */
 export const num = (lang: Lang, n: number | string): string =>
   lang === "ne" ? String(n).replace(/\d/g, (d) => DEVANAGARI[Number(d)]) : String(n);
+
+/** "Updated just now / N min ago" for data `ageMs` old; hours once past 60 minutes. */
+export const freshnessLabel = (lang: Lang, ageMs: number): string => {
+  const min = Math.floor(Math.max(0, ageMs) / 60000);
+  return min < 1 ? t(lang, "updatedNow") : t(lang, "updatedMin", { n: num(lang, min) });
+};
 
 export const locale = (lang: Lang): string | undefined => (lang === "ne" ? "ne-NP" : undefined);
 

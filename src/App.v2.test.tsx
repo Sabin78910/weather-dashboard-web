@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 
@@ -112,4 +112,42 @@ test("10-day list starts with Today and the feels-like card explains the differe
   const feels = screen.getByRole("region", { name: "Feels like" });
   expect(within(feels).getByText("17°")).toBeInTheDocument();
   expect(within(feels).getByText("Wind is making it feel cooler.")).toBeInTheDocument();
+});
+
+describe("data freshness", () => {
+  afterEach(() => { vi.useRealTimers(); });
+  const start = () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    const f = mockFetch();
+    vi.stubGlobal("fetch", f);
+    render(<App />);
+    return f;
+  };
+  const forecastCalls = (f: ReturnType<typeof mockFetch>) => f.mock.calls.filter(([u]) => !u.includes("air-quality") && !u.includes("geocoding")).length;
+
+  test("hero shows the age, updating each minute", async () => {
+    start();
+    const hero = await screen.findByRole("region", { name: "Current weather" });
+    expect(within(hero).getByText("Updated just now")).toBeInTheDocument();
+    await act(async () => { vi.advanceTimersByTime(3 * 60_000); });
+    expect(within(hero).getByText("Updated 3 min ago")).toBeInTheDocument();
+  });
+
+  test("shows Nepali digits", async () => {
+    localStorage.setItem("lang", "ne");
+    start();
+    const hero = await screen.findByRole("region", { name: /हालको|Current/ });
+    await act(async () => { vi.advanceTimersByTime(2 * 60_000); });
+    expect(within(hero).getByText("२ मिनेट अघि अपडेट भयो")).toBeInTheDocument();
+  });
+
+  test("refreshes on tab focus only when data is older than 10 minutes", async () => {
+    const f = start();
+    await screen.findByRole("region", { name: "Current weather" });
+    const before = forecastCalls(f);
+    await act(async () => { vi.advanceTimersByTime(5 * 60_000); document.dispatchEvent(new Event("visibilitychange")); });
+    expect(forecastCalls(f)).toBe(before);
+    await act(async () => { vi.advanceTimersByTime(6 * 60_000); document.dispatchEvent(new Event("visibilitychange")); });
+    await waitFor(() => expect(forecastCalls(f)).toBe(before + 1));
+  });
 });

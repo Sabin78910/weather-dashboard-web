@@ -1,4 +1,4 @@
-import { EN, NE, detectLang, num, t } from "./i18n";
+import { EN, NE, detectLang, freshnessLabel, num, t } from "./i18n";
 import { describe as wx, dailyTips, rainSummary, shareSummary } from "./weather";
 import { loadLang, saveLang } from "./storage";
 
@@ -44,4 +44,10 @@ test("domain text is translated", () => {
   expect(rainSummary([{ time: "2026-10-08T15:00", temp: 1, rain: 70 }], "ne")).toBe("३ बेलुका बजेतिर वर्षा हुन सक्छ (७०%)");
   expect(dailyTips({ temperature: 20, code: 1, days: [{ date: "d", max: 25, min: 15, code: 1, rain: null, precip: null }], hours: [], uv: 7 }, null, "ne")[0].text).toBe("सनस्क्रिन लगाउनुहोस्: पराबैंगनी सूचकांक ७ छ।");
   expect(shareSummary({ name: "Pokhara", country: "", latitude: 0, longitude: 0 }, { temperature: 20, code: 0, days: [] }, "C", "ne")).toBe("आज Pokhara: खुला आकाश, २०°C।");
+});
+
+test("freshnessLabel: just now, minutes, localised digits", () => {
+  expect(freshnessLabel("en", 30_000)).toBe("Updated just now");
+  expect(freshnessLabel("en", 3 * 60_000 + 5000)).toBe("Updated 3 min ago");
+  expect(freshnessLabel("ne", 12 * 60_000)).toBe("१२ मिनेट अघि अपडेट भयो");
 });

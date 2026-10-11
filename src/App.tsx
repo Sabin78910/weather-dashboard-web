@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { compareWithYesterday, convertTemp, formatWind, describe, findPlace, getAirQuality, getWeather, dailyTips, severeOutlook, sceneFor, shareSummary, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { skyFor } from "./sky";
-import { LANGS, detectLang, formatDateTime, num, t, type Key, type Lang } from "./i18n";
+import { LANGS, detectLang, formatDateTime, freshnessLabel, num, t, type Key, type Lang } from "./i18n";
 import { loadFavourites, saveFavourites, loadLastCity, saveLastCity, loadForecast, saveForecast, loadLang, saveLang, loadCityForecast, saveCityForecast, loadUnit, saveUnit, loadTheme, saveTheme, type ForecastSnapshot, type Theme } from "./storage";
 import SkyCanvas from "./components/SkyCanvas";
 import Hourly from "./components/Hourly";
@@ -16,6 +16,7 @@ type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Pro
 // A failed fetch (rather than an HTTP/API error) means the network is unreachable.
 const isOffline = (err: unknown) => !navigator.onLine || err instanceof TypeError;
 
+export const STALE_MS = 10 * 60_000;
 export const RETRY_DELAYS_MS = [2000, 5000, 15000];
 const MY_LOCATION = "My location";
 const SWIPE_PX = 56;
@@ -63,7 +64,9 @@ export default function App() {
   const [dismissedSevere, setDismissedSevere] = useState<string[]>([]);
   const [scrub, setScrub] = useState(0);
   const [slide, setSlide] = useState<"next" | "prev" | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const runId = useRef(0);
+  const refreshOnFocus = useRef<() => void>(() => {});
   const swipe = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const heroRef = useRef<HTMLElement>(null);
 
@@ -158,6 +161,8 @@ export default function App() {
           setAir(null);
           void getAirQuality(p).then(setAir);
           setWeather(await getWeather(p));
+          setCachedAt(null);
+          setUpdatedAt(Date.now());
           setScrub(0);
         } catch {
           setError({ key: "friendlyError" });
@@ -216,6 +221,21 @@ export default function App() {
     };
     window.addEventListener("beforeinstallprompt", onPrompt);
     return () => window.removeEventListener("beforeinstallprompt", onPrompt);
+  }, []);
+
+  const dataAt = cachedAt ?? updatedAt;
+  refreshOnFocus.current = () => {
+    if (loading || dataAt === null || !place || Date.now() - dataAt < STALE_MS) return;
+    if (place.name === MY_LOCATION) locateMe();
+    else void runSearch(place.name);
+  };
+  useEffect(() => {
+    const tickId = setInterval(() => setNow(Date.now()), 60_000);
+    const onVisible = () => {
+      if (document.visibilityState !== "hidden") { setNow(Date.now()); refreshOnFocus.current(); }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(tickId); document.removeEventListener("visibilitychange", onVisible); };
   }, []);
 
   async function install() {
@@ -318,6 +338,7 @@ export default function App() {
             {w.feelsLike !== null && <p className="hero-range">{L("feelsLike", { temp: temp(w.feelsLike) })}</p>}
             {w.humidity !== null && <p className="hero-range">{L("humidity", { pct: n(Math.round(w.humidity)) })}</p>}
           </div>
+          {live && dataAt !== null && <p className="hero-range hero-fresh">{freshnessLabel(lang, now - dataAt)}</p>}
           {rainLine && <p className="hero-nowcast"><Icon name="drop" size={16} /> {rainLine}</p>}
         </div>
         {live && (
