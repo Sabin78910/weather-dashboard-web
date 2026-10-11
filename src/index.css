@@ -86,7 +86,9 @@ a { color: inherit; }
 .chips { display: flex; gap: 8px; overflow-x: auto; list-style: none; margin: 0; padding: 10px 2px 2px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
 .chip { position: relative; display: flex; align-items: center; flex: none; border-radius: 999px; background: var(--chrome); border: 1px solid var(--glass-line); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); transition: background 0.25s; }
-.chip > button:first-child { min-height: 44px; padding: 0 4px 0 16px; font-weight: 650; font-size: 15px; }
+.chip-name { min-height: 44px; padding: 0 4px; font-weight: 650; font-size: 15px; }
+.chip-mv { display: grid; place-items: center; width: 44px; min-height: 44px; border-radius: 999px; font-size: 20px; color: var(--ink-3); }
+.chip-mv:disabled { opacity: 0.3; }
 .chip-x { display: grid; place-items: center; width: 40px; min-height: 44px; border-radius: 999px; color: var(--ink-3); }
 .chip.active { background: var(--sel-bg); }
 .chip.active button { color: var(--sel-ink); }

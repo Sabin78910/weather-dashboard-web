@@ -1,4 +1,4 @@
-import { loadLastCity, saveLastCity, loadFavourites, saveFavourites, loadForecast, saveForecast } from "./storage";
+import { loadLastCity, saveLastCity, loadFavourites, saveFavourites, loadForecast, saveForecast, moveItem } from "./storage";
 
 afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
 
@@ -75,4 +75,13 @@ test("unit and theme preferences persist and reject junk", async () => {
   vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("denied"); });
   expect(loadUnit()).toBeNull();
   expect(loadTheme()).toBeNull();
+});
+
+test("moveItem swaps neighbours, returns a new array, and ignores out-of-range moves", () => {
+  const a = ["A", "B", "C"];
+  expect(moveItem(a, 0, 1)).toEqual(["B", "A", "C"]);
+  expect(moveItem(a, 2, -1)).toEqual(["A", "C", "B"]);
+  expect(moveItem(a, 0, -1)).toEqual(a);
+  expect(moveItem(a, 2, 1)).toEqual(a);
+  expect(a).toEqual(["A", "B", "C"]);
 });

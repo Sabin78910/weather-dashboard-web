@@ -51,3 +51,8 @@ test("freshnessLabel: just now, minutes, localised digits", () => {
   expect(freshnessLabel("en", 3 * 60_000 + 5000)).toBe("Updated 3 min ago");
   expect(freshnessLabel("ne", 12 * 60_000)).toBe("१२ मिनेट अघि अपडेट भयो");
 });
+
+test("move favourite labels exist in both languages", () => {
+  expect(t("en", "moveLeft", { city: "Oslo" })).toBe("Move Oslo left");
+  expect(t("ne", "moveRight", { city: "Oslo" })).toContain("Oslo");
+});
