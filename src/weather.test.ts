@@ -1,4 +1,4 @@
-import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase, severeOutlook, uvWindow, bestWindow, type TimelineHour, pollenLevel, todaysPollen, SEVERE_HEAT_C, SEVERE_COLD_C, floor15, nowcast, feelsReason, type DayForecast } from "./weather";
+import { dewPointComfort, shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase, severeOutlook, uvWindow, bestWindow, type TimelineHour, pollenLevel, todaysPollen, SEVERE_HEAT_C, SEVERE_COLD_C, floor15, nowcast, feelsReason, type DayForecast } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -600,4 +600,26 @@ describe("bestWindow", () => {
     expect(bestWindow([], NOW, "C")).toBeNull();
     expect(bestWindow(day(() => ({ rain: null, wind: null, uv: null, isDay: null })), NOW, "C")).not.toBeNull();
   });
+});
+
+test("dewPointComfort bands and boundaries", () => {
+  expect(dewPointComfort(-5)).toBe("dry");
+  expect(dewPointComfort(9.9)).toBe("dry");
+  expect(dewPointComfort(10)).toBe("comfortable");
+  expect(dewPointComfort(15.9)).toBe("comfortable");
+  expect(dewPointComfort(16)).toBe("humid");
+  expect(dewPointComfort(17.9)).toBe("humid");
+  expect(dewPointComfort(18)).toBe("muggy");
+  expect(dewPointComfort(20.9)).toBe("muggy");
+  expect(dewPointComfort(21)).toBe("oppressive");
+  expect(convertTemp(18, "F")).toBeCloseTo(64.4);
+});
+
+test("getWeather reads dew point, null when missing", async () => {
+  const body = (cur: object) => ({ current: { temperature_2m: 21, wind_speed_10m: 5, weather_code: 2, ...cur }, daily: { time: ["2026-10-08"], temperature_2m_max: [25], temperature_2m_min: [14], weather_code: [61] } });
+  const p = { name: "K", country: "N", latitude: 1, longitude: 2 };
+  const f = vi.fn(() => ok(body({ dew_point_2m: 12.4 })));
+  expect((await getWeather(p, f as unknown as typeof fetch)).dewPoint).toBe(12.4);
+  expect(String((f.mock.calls[0] as unknown[])[0])).toContain("dew_point_2m");
+  expect((await getWeather(p, (() => ok(body({}))) as unknown as typeof fetch)).dewPoint).toBeNull();
 });

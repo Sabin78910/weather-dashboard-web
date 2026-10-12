@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import { compareWithYesterday, convertTemp, formatWind, describe, findPlace, getAirQuality, getWeather, dailyTips, bestWindow, severeOutlook, sceneFor, shareSummary, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { dewPointComfort, compareWithYesterday, convertTemp, formatWind, describe, findPlace, getAirQuality, getWeather, dailyTips, bestWindow, severeOutlook, sceneFor, shareSummary, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { skyFor } from "./sky";
 import { LANGS, detectLang, formatDateTime, freshnessLabel, num, t, type Key, type Lang } from "./i18n";
 import { buildWidgetData, cityFromUrl, pushWidgetData } from "./widget";
@@ -24,6 +24,7 @@ const isOffline = (err: unknown) => !navigator.onLine || err instanceof TypeErro
 export const RETRY_DELAYS_MS = [2000, 5000, 15000];
 const MY_LOCATION = "My location";
 const SWIPE_PX = 56;
+const DEW_KEYS = { dry: "dewDry", comfortable: "dewComfortable", humid: "dewHumid", muggy: "dewMuggy", oppressive: "dewOppressive" } as const;
 /** Minimum gap between automatic refresh attempts, so a slow or failing request is not stacked. */
 const ATTEMPT_GAP_MS = 2 * 60_000;
 class NotFoundError extends Error {}
@@ -367,6 +368,7 @@ export default function App() {
           <div className="hero-row hero-stats">
             {w.feelsLike !== null && <p className="hero-range">{L("feelsLike", { temp: temp(w.feelsLike) })}</p>}
             {w.humidity !== null && <p className="hero-range">{L("humidity", { pct: n(Math.round(w.humidity)) })}</p>}
+            {w.dewPoint !== null && <p className="hero-range">{L("dewPoint", { temp: temp(w.dewPoint), label: L(DEW_KEYS[dewPointComfort(w.dewPoint)]) })}</p>}
           </div>
           {live && dataAt !== null && <p className="hero-meta hero-fresh">{freshnessLabel(lang, now - dataAt)}{modelTime(w.now) && <span className="hero-model"> · {L("modelTime", { time: n(modelTime(w.now) as string) })}</span>}</p>}
           {rainLine && <p className="hero-nowcast"><Icon name="drop" size={16} /> {rainLine}</p>}
