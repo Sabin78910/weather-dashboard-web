@@ -23,6 +23,11 @@ function cloudSprite(dark: boolean): HTMLCanvasElement {
   return c;
 }
 
+/** Sun/moon centre: kept in the top band so it never sits behind the hero temperature. */
+export function celestialPos(w: number, h: number, sunX: number, el: number): { x: number; y: number } {
+  return { x: w * (0.12 + 0.76 * sunX), y: Math.min(96, h * (0.14 - 0.08 * Math.max(0, el))) };
+}
+
 /** Draws sun rays, moon, stars, clouds, rain, snow, fog and lightning over the CSS gradient. */
 function startSky(canvas: HTMLCanvasElement, get: () => SkyState, reduced: boolean) {
   const ctx = canvas.getContext("2d");
@@ -71,7 +76,7 @@ function startSky(canvas: HTMLCanvasElement, get: () => SkyState, reduced: boole
     }
     const night = Math.max(0, Math.min(1, -cur.el * 3));
     if (night > 0.02) {
-      const mx = w * 0.8, my = h * 0.14;
+      const mx = w * 0.8, my = Math.min(80, h * 0.1);
       ctx!.globalAlpha = night * (1 - cur.cloud * 0.8);
       const g = ctx!.createRadialGradient(mx, my, 0, mx, my, 90);
       g.addColorStop(0, "rgba(220,230,255,0.35)");
@@ -87,7 +92,7 @@ function startSky(canvas: HTMLCanvasElement, get: () => SkyState, reduced: boole
     // Sun with slowly turning rays.
     const day = Math.max(0, Math.min(1, (cur.el + 0.15) / 0.3));
     if (day > 0.02) {
-      const sx = w * (0.12 + 0.76 * cur.sunX), sy = h * (0.3 - 0.22 * Math.max(0, cur.el));
+      const { x: sx, y: sy } = celestialPos(w, h, cur.sunX, cur.el);
       const a = day * (1 - cur.cloud * 0.85);
       ctx!.globalAlpha = a;
       const glow = ctx!.createRadialGradient(sx, sy, 0, sx, sy, 260);
@@ -254,6 +259,10 @@ export default function SkyCanvas({ state, scene }: { state: SkyState; scene: st
     });
     return () => { cancelAnimationFrame(id); stop(); };
   }, []);
+  useEffect(() => {
+    // Keep the page backdrop in step with the sky so the end of the viewport never shows a seam.
+    document.documentElement.style.setProperty("--page-bottom", state.bottom);
+  }, [state.bottom]);
   const vars = { "--sky-top": state.top, "--sky-bottom": state.bottom } as CSSProperties;
   return (
     <div className={`sky ${scene}`} data-testid="sky" aria-hidden="true" style={vars}>

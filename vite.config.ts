@@ -9,6 +9,7 @@ export default defineConfig({
   plugins: [react(), { name: "csp-meta", apply: "build", transformIndexHtml: injectCsp }],
   test: {
     globals: true,
+    css: true,
     environment: "jsdom",
     setupFiles: ["./src/setupTests.ts"],
   },

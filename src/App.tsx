@@ -367,7 +367,7 @@ export default function App() {
             {w.feelsLike !== null && <p className="hero-range">{L("feelsLike", { temp: temp(w.feelsLike) })}</p>}
             {w.humidity !== null && <p className="hero-range">{L("humidity", { pct: n(Math.round(w.humidity)) })}</p>}
           </div>
-          {live && dataAt !== null && <p className="hero-range hero-fresh">{freshnessLabel(lang, now - dataAt)}{modelTime(w.now) && <span className="hero-model"> · {L("modelTime", { time: n(modelTime(w.now) as string) })}</span>}</p>}
+          {live && dataAt !== null && <p className="hero-meta hero-fresh">{freshnessLabel(lang, now - dataAt)}{modelTime(w.now) && <span className="hero-model"> · {L("modelTime", { time: n(modelTime(w.now) as string) })}</span>}</p>}
           {rainLine && <p className="hero-nowcast"><Icon name="drop" size={16} /> {rainLine}</p>}
         </div>
         {live && (
