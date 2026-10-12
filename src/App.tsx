@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import { compareWithYesterday, convertTemp, formatWind, describe, findPlace, getAirQuality, getWeather, dailyTips, severeOutlook, sceneFor, shareSummary, type AirQuality, type Place, type Unit, type Weather } from "./weather";
+import { compareWithYesterday, convertTemp, formatWind, describe, findPlace, getAirQuality, getWeather, dailyTips, bestWindow, severeOutlook, sceneFor, shareSummary, type AirQuality, type Place, type Unit, type Weather } from "./weather";
 import { skyFor } from "./sky";
 import { LANGS, detectLang, formatDateTime, freshnessLabel, num, t, type Key, type Lang } from "./i18n";
 import { buildWidgetData, cityFromUrl, pushWidgetData } from "./widget";
@@ -343,6 +343,7 @@ export default function App() {
   const sev = place && weather ? severeOutlook(weather.days, unit) : null;
   const sevKey = sev && place ? `${place.name}|${sev.date}` : null;
   const tips = weather ? dailyTips(weather, air?.aqi ?? null, lang) : [];
+  const best = weather?.timeline?.length && weather.now ? bestWindow(weather.timeline, weather.now, unit) : undefined;
 
   /** Hero for live data, or a preview of the cached forecast while it refreshes (not a landmark until live). */
   const hero = (p: Place, w: Weather, live: boolean) => {
@@ -478,7 +479,7 @@ export default function App() {
               <SunCard weather={weather} f={f} />
               <PressureCard weather={weather} f={f} />
               {air && <PollenCard air={air} f={f} />}
-              {tips.length > 0 && <TipsCard tips={tips} f={f} />}
+              {(tips.length > 0 || best !== undefined) && <TipsCard tips={tips} best={best} f={f} />}
             </div>
           )}
           <p className="credit">{L("data")} <a href="https://open-meteo.com/">Open-Meteo</a></p>

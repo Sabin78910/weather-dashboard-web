@@ -372,6 +372,35 @@ test("shows tip cards for today", async () => {
   expect(within(tips).getByText(/umbrella/i)).toBeInTheDocument();
 });
 
+const withHours = (temp: (i: number) => number, rain: (i: number) => number) => {
+  const base = mockFetch();
+  return vi.fn((url: string) =>
+    base(url).then(async (r) => {
+      const d = await r.json();
+      if (d.hourly) {
+        d.hourly.temperature_2m = Array.from({ length: 24 }, (_, i) => temp(i));
+        d.hourly.precipitation_probability = Array.from({ length: 24 }, (_, i) => rain(i));
+        d.hourly.is_day = Array.from({ length: 24 }, (_, i) => (i >= 6 && i < 18 ? 1 : 0));
+      }
+      return { ok: true, status: 200, json: () => Promise.resolve(d) } as Response;
+    }),
+  );
+};
+
+test("tips show the best time outside", async () => {
+  vi.stubGlobal("fetch", withHours(() => 21, () => 0));
+  render(<App />);
+  const tips = await screen.findByRole("region", { name: "Tips for today" });
+  expect(within(tips).getByText("Best outside: 11:00–14:00, 21° and dry")).toBeInTheDocument();
+});
+
+test("tips say plainly when there is no good window", async () => {
+  vi.stubGlobal("fetch", withHours(() => 21, () => 95));
+  render(<App />);
+  const tips = await screen.findByRole("region", { name: "Tips for today" });
+  expect(within(tips).getByText("No comfortable window left outside today.")).toBeInTheDocument();
+});
+
 test("shows the cached forecast with a last-updated note when offline", async () => {
   const f = mockFetch();
   vi.stubGlobal("fetch", f);
