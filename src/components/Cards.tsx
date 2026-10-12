@@ -2,7 +2,7 @@ import { useId, useState } from "react";
 import {
   aqiLevel, uvLevel, uvWindow, healthAdvice, gaugeFraction, arcPoint, formatWind, visibleGust, compassPoint,
   formatPressure, pressureTrend, formatVisibility, sunProgress, moonPhase, nowcast, rainSummary, feelsReason,
-  AQI_GAUGE_MAX, UV_GAUGE_MAX, type AirQuality, type Weather, type Tip, type SevereOutlook,
+  AQI_GAUGE_MAX, UV_GAUGE_MAX, BEST_DRY_MAX, type AirQuality, type Weather, type Tip, type SevereOutlook, type BestWindow,
 } from "../weather";
 import { t, formatWeekday, type Key } from "../i18n";
 import AirSheet, { BandMark } from "./AirSheet";
@@ -43,10 +43,14 @@ export function Gauge({ label, value, max, color, text, stops }: { label: string
   );
 }
 
-export function TipsCard({ tips, f }: { tips: Tip[]; f: Fmt }) {
+export function TipsCard({ tips, best, f }: { tips: Tip[]; best?: BestWindow | null; f: Fmt }) {
+  const { L, n } = f;
+  const bestText = best === undefined ? null
+    : best === null ? L("bestOutsideNone")
+    : L(best.rain >= BEST_DRY_MAX ? "bestOutsideRain" : "bestOutside", { start: n(best.start), end: n(best.end), temp: n(best.temp), pct: n(best.rain) });
   return (
     <Card label={f.L("tips")} title={f.L("tips")} icon="bulb" className="wide tips">
-      <ul>{tips.map((tip) => <li key={tip.id}><span aria-hidden="true">{tip.icon}</span> {tip.text}</li>)}</ul>
+      <ul>{bestText && <li><span aria-hidden="true">🕒</span> {bestText}</li>}{tips.map((tip) => <li key={tip.id}><span aria-hidden="true">{tip.icon}</span> {tip.text}</li>)}</ul>
     </Card>
   );
 }

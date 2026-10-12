@@ -387,3 +387,47 @@ export type FeelsReason = "wind" | "humid" | "similar";
 export function feelsReason(temp: number, feels: number): FeelsReason {
   return feels <= temp - 2 ? "wind" : feels >= temp + 2 ? "humid" : "similar";
 }
+
+export interface BestWindow { start: string; end: string; temp: number; rain: number; }
+
+const COMFORT_C = 20;
+const WINDOW_MAX_HOURS = 3;
+const WINDOW_MIN_HOURS = 2;
+const OK_RAIN = 40;
+const OK_TEMP_C: [number, number] = [5, 32];
+const OK_WIND = 40;
+const OK_UV = 8;
+export const BEST_DRY_MAX = 20;
+const hh = (h: number): string => `${String(h).padStart(2, "0")}:00`;
+
+/** Lower is more comfortable; null when the hour is too wet, hot, cold, windy or sunny to recommend. */
+function discomfort(h: TimelineHour): number | null {
+  const rain = h.rain ?? 0, wind = h.wind ?? 0, uv = h.uv ?? 0;
+  if (rain >= OK_RAIN || h.temp < OK_TEMP_C[0] || h.temp > OK_TEMP_C[1] || wind >= OK_WIND || uv >= OK_UV) return null;
+  return rain / 10 + Math.abs(h.temp - COMFORT_C) + Math.max(0, uv - 5) * 2 + Math.max(0, wind - 15) / 5;
+}
+
+/** Most comfortable contiguous 2-3 daylight hours still ahead today; null if no hour is decent. Earliest, longest wins ties. */
+export function bestWindow(hours: TimelineHour[], now: string, unit: Unit): BestWindow | null {
+  const today = now.slice(0, 10), nowH = Number(now.slice(11, 13));
+  const left = hours
+    .filter((h) => h.time.startsWith(today) && h.isDay !== false && Number(h.time.slice(11, 13)) > nowH)
+    .map((h) => ({ h, hour: Number(h.time.slice(11, 13)), score: discomfort(h) }));
+  let best: { i: number; len: number; avg: number } | null = null;
+  for (let len = WINDOW_MAX_HOURS; len >= WINDOW_MIN_HOURS; len--) {
+    for (let i = 0; i + len <= left.length; i++) {
+      const w = left.slice(i, i + len);
+      if (w.some((x, k) => x.score === null || x.hour !== w[0].hour + k)) continue;
+      const avg = w.reduce((a, x) => a + (x.score as number), 0) / len;
+      if (!best || avg < best.avg - 1e-9) best = { i, len, avg };
+    }
+  }
+  if (!best) return null;
+  const w = left.slice(best.i, best.i + best.len);
+  return {
+    start: hh(w[0].hour),
+    end: hh(w[w.length - 1].hour + 1),
+    temp: Math.round(convertTemp(w.reduce((a, x) => a + x.h.temp, 0) / w.length, unit)),
+    rain: Math.max(...w.map((x) => x.h.rain ?? 0)),
+  };
+}

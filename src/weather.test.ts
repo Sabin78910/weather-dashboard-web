@@ -1,4 +1,4 @@
-import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase, severeOutlook, uvWindow, pollenLevel, todaysPollen, SEVERE_HEAT_C, SEVERE_COLD_C, floor15, nowcast, feelsReason, type DayForecast } from "./weather";
+import { shareSummary, describe as describeCode, findPlace, getWeather, convertTemp, iconKind, rangeBar, getAirQuality, aqiLevel, uvLevel, healthAdvice, rainSummary, sceneFor, dailyTips, formatPrecip, formatWind, visibleGust, formatPressure, formatVisibility, pressureTrend, compareWithYesterday, moonPhase, severeOutlook, uvWindow, bestWindow, type TimelineHour, pollenLevel, todaysPollen, SEVERE_HEAT_C, SEVERE_COLD_C, floor15, nowcast, feelsReason, type DayForecast } from "./weather";
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
 
@@ -560,4 +560,44 @@ test("getAirQuality reads dominant pollutant, 24h trend and per-species pollen",
   const url = String((f.mock.calls[0] as unknown[])[0]);
   expect(url).toContain("ozone");
   expect(url).toContain("hourly=european_aqi");
+});
+
+describe("bestWindow", () => {
+  const NOW = "2026-10-08T10:15";
+  const hr = (h: number, o: Partial<TimelineHour> = {}): TimelineHour => ({ time: `2026-10-08T${String(h).padStart(2, "0")}:00`, temp: 20, rain: 0, code: 1, isDay: h >= 6 && h < 18, wind: 5, uv: 2, ...o });
+  const day = (f: (h: number) => Partial<TimelineHour>) => Array.from({ length: 24 }, (_, h) => hr(h, f(h)));
+
+  test("clear day picks the mild dry afternoon", () => {
+    const hours = day((h) => ({ temp: h < 12 ? 6 : h < 15 ? 34 : 21, uv: h >= 12 && h < 15 ? 9 : 2 }));
+    expect(bestWindow(hours, NOW, "C")).toEqual({ start: "15:00", end: "18:00", temp: 21, rain: 0 });
+  });
+  test("rainy all day returns null", () => {
+    expect(bestWindow(day(() => ({ rain: 90 })), NOW, "C")).toBeNull();
+  });
+  test("extreme heat or cold returns null", () => {
+    expect(bestWindow(day(() => ({ temp: 41 })), NOW, "C")).toBeNull();
+    expect(bestWindow(day(() => ({ temp: -10 })), NOW, "C")).toBeNull();
+  });
+  test("ignores past hours and night hours", () => {
+    const hours = day((h) => ({ temp: h < 10 ? 20 : 8 + (h === 17 ? 12 : 0), rain: h < 10 ? 0 : h >= 16 ? 0 : 80 }));
+    // 10:00 is the current hour (past once it started); only 16-17 remain in daylight → 2h window
+    expect(bestWindow(hours, NOW, "C")).toMatchObject({ start: "16:00", end: "18:00" });
+    expect(bestWindow(day(() => ({ isDay: false })), NOW, "C")).toBeNull();
+  });
+  test("ignores tomorrow's hours", () => {
+    const hours = [hr(17), { ...hr(8), time: "2026-10-09T08:00" }, { ...hr(9), time: "2026-10-09T09:00" }];
+    expect(bestWindow(hours, NOW, "C")).toBeNull();
+  });
+  test("ties are deterministic: earliest and longest window wins", () => {
+    expect(bestWindow(day(() => ({})), NOW, "C")).toMatchObject({ start: "11:00", end: "14:00" });
+  });
+  test("reports temperature in the chosen unit and the worst rain chance", () => {
+    const hours = day((h) => ({ rain: h === 12 ? 30 : 0 }));
+    expect(bestWindow(hours, NOW, "F")).toMatchObject({ temp: 68 });
+    expect(bestWindow(day((h) => ({ rain: h < 18 ? 30 : 0 })), NOW, "C")?.rain).toBe(30);
+  });
+  test("missing data is tolerated", () => {
+    expect(bestWindow([], NOW, "C")).toBeNull();
+    expect(bestWindow(day(() => ({ rain: null, wind: null, uv: null, isDay: null })), NOW, "C")).not.toBeNull();
+  });
 });
