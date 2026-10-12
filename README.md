@@ -42,3 +42,6 @@ Setup (done once, on a machine with Android Studio):
    both light and dark system themes (keep AA contrast).
 5. Make the widget root's `PendingIntent` open `MainActivity` with the data URI `https://sabin78910.github.io/weather-dashboard-web/?city=<city>`;
    the app reads `?city=` on launch and opens that city.
+
+## Performance budget
+CI fails if the gzipped JavaScript in `dist/assets` exceeds **180 KB** (`.github/scripts/check-bundle-size.mjs`, no dependencies). Run it locally after `npm run build` with `node .github/scripts/check-bundle-size.mjs`.
