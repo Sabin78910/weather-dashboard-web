@@ -6,7 +6,7 @@ export interface Place { name: string; country: string; latitude: number; longit
 export interface DayForecast { date: string; max: number; min: number; code: number; rain: number | null; precip: number | null; }
 export interface HourForecast { time: string; temp: number; rain?: number; }
 export interface UvHour { time: string; uv: number | null; }
-export interface Weather { timeline?: TimelineHour[]; minutely?: Slot[]; temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; gust: number | null; daylightMin: number | null; daylightDeltaMin: number | null; uvHours: UvHour[]; }
+export interface Weather { timeline?: TimelineHour[]; minutely?: Slot[]; temperature: number; wind: number; code: number; isDay: boolean; days: DayForecast[]; hours: HourForecast[]; uv: number | null; feelsLike: number | null; humidity: number | null; dewPoint: number | null; windDir: number | null; sunrise: string | null; sunset: string | null; now: string | null; yesterdayMax: number | null; pressure: number | null; visibility: number | null; pressureDelta: number | null; gust: number | null; daylightMin: number | null; daylightDeltaMin: number | null; uvHours: UvHour[]; }
 export interface AirQuality { aqi: number; pm25: number | null; pollen: Pollen | null; dominant: Pollutant | null; trend: number[]; species: SpeciesPollen[]; }
 /** One hour of the 24-hour scrubber timeline; null fields are missing from the API response. */
 export interface TimelineHour { time: string; temp: number; rain: number | null; code: number | null; isDay: boolean | null; wind: number | null; uv: number | null; }
@@ -62,7 +62,7 @@ export async function findPlace(query: string, f: Fetch = fetch): Promise<Place 
 export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
-    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m,pressure_msl,visibility,wind_gusts_10m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability,pressure_msl,uv_index,weather_code,is_day,wind_speed_10m&minutely_15=precipitation&forecast_minutely_15=12&timezone=auto&forecast_days=10&past_days=1`;
+    `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day,apparent_temperature,relative_humidity_2m,dew_point_2m,pressure_msl,visibility,wind_gusts_10m&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum,uv_index_max&hourly=temperature_2m,precipitation_probability,pressure_msl,uv_index,weather_code,is_day,wind_speed_10m&minutely_15=precipitation&forecast_minutely_15=12&timezone=auto&forecast_days=10&past_days=1`;
   const res = await f(url);
   if (!res.ok) throw new Error(`Forecast failed (${res.status})`);
   const d = await res.json();
@@ -112,6 +112,7 @@ export async function getWeather(p: Place, f: Fetch = fetch): Promise<Weather> {
     uv: d.daily.uv_index_max?.[ti] ?? null,
     feelsLike: d.current.apparent_temperature ?? null,
     humidity: d.current.relative_humidity_2m ?? null,
+    dewPoint: d.current.dew_point_2m ?? null,
     windDir: d.current.wind_direction_10m ?? null,
     gust: d.current.wind_gusts_10m ?? null,
     sunrise: d.daily.sunrise?.[ti] ?? null,
@@ -386,6 +387,12 @@ export type FeelsReason = "wind" | "humid" | "similar";
 /** Why the apparent temperature differs: 2°C+ cooler is wind chill, 2°C+ warmer is humidity, otherwise similar. */
 export function feelsReason(temp: number, feels: number): FeelsReason {
   return feels <= temp - 2 ? "wind" : feels >= temp + 2 ? "humid" : "similar";
+}
+
+export type DewComfort = "dry" | "comfortable" | "humid" | "muggy" | "oppressive";
+/** Plain-language comfort band for a dew point in °C. */
+export function dewPointComfort(dewC: number): DewComfort {
+  return dewC < 10 ? "dry" : dewC < 16 ? "comfortable" : dewC < 18 ? "humid" : dewC < 21 ? "muggy" : "oppressive";
 }
 
 export interface BestWindow { start: string; end: string; temp: number; rain: number; }
