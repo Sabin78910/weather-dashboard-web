@@ -55,7 +55,7 @@ export function AirCard({ air, f }: { air: AirQuality | null; f: Fmt }) {
   const { L, n, lang } = f;
   const [open, setOpen] = useState(false);
   return (
-    <Card label={L("air")} title={L("air")} icon="leaf" className="small">
+    <Card label={L("air")} title={L("air")} icon="leaf" className={air ? "small" : "wide compact"}>
       {air ? (
         <>
           <Gauge label={L("airIndex")} value={air.aqi} max={AQI_GAUGE_MAX} color={aqiLevel(air.aqi).color} text={n(air.aqi)} stops={AQI_STOPS} />
@@ -152,7 +152,7 @@ export function PressureCard({ weather, f }: { weather: Weather; f: Fmt }) {
       {p && (
         <p className="pressure">
           <span className="big-value sm">{n(p.value)} {L(p.unit)}</span>
-          {trend && <> <span aria-hidden="true" className={`trend ${trend}`}>{trend === "rising" ? "↑" : trend === "falling" ? "↓" : "→"}</span> <span aria-label={L("trendAria", { trend: L(trend) })}>{L(trend)}</span></>}
+          {trend && <span className="trend-group"><span aria-hidden="true" className={`trend ${trend}`}>{trend === "rising" ? "↑" : trend === "falling" ? "↓" : "→"}</span> <span aria-label={L("trendAria", { trend: L(trend) })}>{L(trend)}</span></span>}
         </p>
       )}
       {v && <p>{L("visibility")}: <span>{n(v.value)} {L(v.unit)}</span></p>}
@@ -170,7 +170,7 @@ export function SunCard({ weather, f }: { weather: Weather; f: Fmt }) {
   const rx = (7 * Math.abs(Math.cos(2 * Math.PI * moon.phase))).toFixed(2);
   const arc = "M14 54 A46 46 0 0 1 106 54";
   return (
-    <Card label={L("sunAria")} title={L("sun")} icon="sun" className="small">
+    <Card label={L("sunAria")} title={L("sun")} icon="sun" className="wide sun">
       <svg className="sun-arc" viewBox="0 0 120 64" aria-hidden="true">
         <defs>
           <linearGradient id="sun-g" x1="0" x2="1"><stop offset="0" stopColor="#ff9f43" /><stop offset="1" stopColor="#ffe27a" /></linearGradient>
