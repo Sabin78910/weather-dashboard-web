@@ -28,4 +28,6 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: JS bundle budget (180 KB gzip)
+        run: node .github/scripts/check-bundle-size.mjs
       - run: npm audit --audit-level=high --omit=dev
